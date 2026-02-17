@@ -1,1 +1,10 @@
-
+{
+  "schemaVersion": 1,
+  "name": "Mali build",
+  "description": "",
+  "author": "Disco-sys",
+  "packageVersion": "1.0",
+  "vendor": "Mali",
+  "minApi": 28,
+  "libraryName": "vulkan.mt6768.so"
+}
