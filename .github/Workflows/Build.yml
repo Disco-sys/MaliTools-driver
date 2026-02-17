@@ -1,6 +1,9 @@
-
-name: Build Mali build Driver
-on: [push]
+name: Mali build
+on: 
+  push:
+    branches:
+      - main
+  workflow_dispatch:
 
 jobs:
   build:
@@ -14,16 +17,20 @@ jobs:
           ndk-version: r25c
 
       - name: Compile Driver
-        run: ndk-build -C jni/ NDK_PROJECT_PATH=. APP_BUILD_SCRIPT=jni/Android.mk APP_ABI=arm64-v8a
+        run: |
+          ndk-build -C jni/ \
+          NDK_PROJECT_PATH=. \
+          APP_BUILD_SCRIPT=jni/Android.mk \
+          APP_ABI=arm64-v8a
 
-      - name: Create AdrenoTools Zip
+      - name: Prepare Package
         run: |
           mkdir -p package
           cp libs/arm64-v8a/vulkan.mt6768.so package/
           cp meta.json package/
           cd package && zip -r ../Mali-build-Driver.zip .
 
-      - name: Upload Release
+      - name: Upload Driver Zip
         uses: actions/upload-artifact@v4
         with:
           name: Mali-build-Zip
