@@ -9,9 +9,9 @@ jobs:
   build:
     runs-on: ubuntu-latest
     env:
-      NDK_VERSION: r26d
-      API_LEVEL: 31
-      PLATFORM_SDK_VERSION: 34
+      NDK_VERSION: r29           # Contains Clang 21
+      API_LEVEL: 31              # Android 12
+      PLATFORM_SDK_VERSION: 34   # Recommended by Mesa docs
 
     steps:
       - name: Checkout
@@ -39,7 +39,7 @@ jobs:
           cd mali_build
           git clone --depth 1 --branch main https://gitlab.freedesktop.org/mesa/mesa.git
 
-      - name: Configure and build PanVK only
+      - name: Configure Mesa (minimal)
         run: |
           cd mali_build/mesa
           cat > ../cross.txt <<EOF
@@ -74,6 +74,10 @@ jobs:
             -Dandroid-stub=true \
             -Dbuildtype=release \
             --strip
+
+      - name: Build PanVK only
+        run: |
+          cd mali_build/mesa
           meson compile -C build-android src/panfrost/vulkan/libvulkan_panfrost.so
 
       - name: Package driver
