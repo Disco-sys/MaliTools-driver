@@ -54,7 +54,8 @@ jobs:
 
     - name: Configure Mesa for PanVK and Mesa NIR
       run: |
-        cat > cross-android.txt <<EOF
+        cd mesa
+        cat > ../cross-android.txt <<EOF
         [binaries]
         c = '${TOOLCHAIN}/bin/aarch64-linux-android${API_LEVEL}-clang'
         cpp = '${TOOLCHAIN}/bin/aarch64-linux-android${API_LEVEL}-clang++'
@@ -76,7 +77,7 @@ jobs:
         needs_exe_wrapper = true
         EOF
 
-        meson setup build-android --cross-file cross-android.txt \
+        meson setup build-android --cross-file ../cross-android.txt \
           -Dplatforms=android \
           -Dplatform-sdk-version=$PLATFORM_SDK_VERSION \
           -Dvulkan-drivers=panfrost \
@@ -88,18 +89,19 @@ jobs:
 
     - name: Build PanVK and Mesa NIR
       run: |
+        cd mesa
         meson compile -C build-android
 
     - name: Package drivers
       run: |
         mkdir -p install
         # Vulkan
-        cp build-android/src/panfrost/vulkan/libvulkan_panfrost.so install/
+        cp mesa/build-android/src/panfrost/vulkan/libvulkan_panfrost.so install/
         # OpenGL ES
-        cp build-android/src/gallium/targets/dri/libgallium_dri.so install/
-        cp build-android/src/egl/libEGL.so install/
-        cp build-android/src/mapi/shared-glapi/libglapi.so install/
-        cp build-android/src/gles/libGLESv2.so install/
+        cp mesa/build-android/src/gallium/targets/dri/libgallium_dri.so install/
+        cp mesa/build-android/src/egl/libEGL.so install/
+        cp mesa/build-android/src/mapi/shared-glapi/libglapi.so install/
+        cp mesa/build-android/src/gles/libGLESv2.so install/
         cd install
         zip -r mali-drivers.zip *.so
 
@@ -109,4 +111,3 @@ jobs:
       with:
         name: mali-drivers
         path: install/mali-drivers.zip
-        retention-days: 5
