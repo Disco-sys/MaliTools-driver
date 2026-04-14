@@ -1,4 +1,4 @@
-name: Build Mali Drivers (ZINK/NIR and PanVK)
+name: Build ZINK (MESA NIR) and PanVK Drivers
 
 on:
   workflow_dispatch:
@@ -7,16 +7,13 @@ jobs:
   build:
     runs-on: ubuntu-22.04
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
       - name: Install dependencies
         run: |
           sudo apt update
           sudo apt install -y python3-pip ninja-build pkg-config libelf-dev wget unzip zip
           pip3 install meson mako
 
-      - name: Setup Android NDK
+      - name: Setup NDK r28
         uses: nttld/setup-ndk@v1
         id: ndk
         with:
@@ -25,59 +22,44 @@ jobs:
       - name: Generate cross file
         run: |
           NDK="${{ steps.ndk.outputs.ndk-path }}"
-          cat > android-cross.txt <<EOF
+          cat > cross.txt <<EOF
           [binaries]
           c = '${NDK}/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android24-clang'
           cpp = '${NDK}/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android24-clang++'
           ar = '${NDK}/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'
           strip = '${NDK}/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip'
           pkg-config = '/usr/bin/pkg-config'
-
           [host_machine]
           system = 'android'
           cpu_family = 'aarch64'
           cpu = 'armv8-a'
           endian = 'little'
-
           [properties]
           needs_exe_wrapper = true
           EOF
 
-      - name: Clone Mesa
-        run: git clone --depth 1 --branch main https://gitlab.freedesktop.org/mesa/mesa.git
+      - name: Clone Mesa (stable release)
+        run: git clone --depth 1 --branch mesa-24.1.0 https://gitlab.freedesktop.org/mesa/mesa.git
 
-      - name: Build ZINK/NIR driver
+      - name: Build ZINK driver (MESA NIR path)
         run: |
           cd mesa
           meson setup build-zink \
-            --cross-file ../android-cross.txt \
+            --cross-file ../cross.txt \
             -Dplatforms=android \
-            -Dgallium-drivers=zink,panfrost \
+            -Dgallium-drivers=zink \
             -Dvulkan-drivers= \
             -Dbuildtype=release \
-            -Dllvm=enabled \
-            -Dandroid-stub=true \
-            -Dgallium-opencl=disabled \
-            -Dgallium-omx=disabled \
-            -Dgallium-va=disabled \
-            -Dgallium-xa=disabled \
-            -Dtools= \
-            -Dopengl=true \
-            -Dgles1=disabled \
-            -Dgles2=disabled
+            -Dllvm=disabled \
+            -Dandroid-stub=true
           meson compile -C build-zink
-          mkdir -p ../zink_nir_package
-          DRIVER_PATH=$(find build-zink -name "libgallium_dri.so" | head -n 1)
-          if [ -n "$DRIVER_PATH" ]; then
-            cp "$DRIVER_PATH" ../zink_nir_package/
-          else
-            echo "ERROR: libgallium_dri.so not found"
-            exit 1
-          fi
+          mkdir -p ../zink_pkg
+          # Find libgallium_dri.so (the Zink driver)
+          find build-zink -name "libgallium_dri.so" -exec cp {} ../zink_pkg/ \;
           cd ..
-          cat > zink_nir_package/meta.json <<EOF
+          cat > zink_pkg/meta.json <<EOF
           {
-            "name": "ZINK_NIR_Mali",
+            "name": "ZINK_MESA_NIR_Mali",
             "version": "1.0",
             "type": "opengl",
             "env": {
@@ -87,38 +69,37 @@ jobs:
             }
           }
           EOF
-          cd zink_nir_package && zip -r ../zink_nir_driver.zip . && cd ..
+          cd zink_pkg && zip -r ../zink_mesa_nir_driver.zip . && cd ..
 
       - name: Build PanVK driver
         run: |
           cd mesa
           meson setup build-panvk \
-            --cross-file ../android-cross.txt \
+            --cross-file ../cross.txt \
             -Dplatforms=android \
             -Dvulkan-drivers=panfrost \
             -Dgallium-drivers= \
             -Dbuildtype=release \
-            -Dllvm=enabled \
-            -Dandroid-stub=true \
-            -Dgallium-opencl=disabled
+            -Dllvm=disabled \
+            -Dandroid-stub=true
           meson compile -C build-panvk
-          mkdir -p ../panvk_package
-          cp build-panvk/src/panfrost/vulkan/libvulkan_panfrost.so ../panvk_package/
+          mkdir -p ../panvk_pkg
+          cp build-panvk/src/panfrost/vulkan/libvulkan_panfrost.so ../panvk_pkg/
           cd ..
-          cat > panvk_package/meta.json <<EOF
+          cat > panvk_pkg/meta.json <<EOF
           {
             "name": "PanVK_Mali",
             "version": "1.0",
             "type": "vulkan"
           }
           EOF
-          cd panvk_package && zip -r ../panvk_driver.zip . && cd ..
+          cd panvk_pkg && zip -r ../panvk_driver.zip . && cd ..
 
-      - name: Upload ZINK/NIR driver
+      - name: Upload ZINK (MESA NIR) driver
         uses: actions/upload-artifact@v4
         with:
-          name: ZINK-NIR-Mali-Driver
-          path: zink_nir_driver.zip
+          name: ZINK-MESA-NIR-Mali-Driver
+          path: zink_mesa_nir_driver.zip
 
       - name: Upload PanVK driver
         uses: actions/upload-artifact@v4
