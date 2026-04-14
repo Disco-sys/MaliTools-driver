@@ -9,9 +9,9 @@ jobs:
   build:
     runs-on: ubuntu-latest
     env:
-      NDK_VERSION: r29           # Contains Clang 21
-      API_LEVEL: 31              # Android 12
-      PLATFORM_SDK_VERSION: 34   # Recommended by Mesa docs
+      NDK_VERSION: r29
+      API_LEVEL: 31
+      PLATFORM_SDK_VERSION: 34
 
     steps:
       - name: Checkout
@@ -23,7 +23,7 @@ jobs:
           sudo apt-get install -y --no-install-recommends \
             wget unzip zip ninja-build meson python3-pip python3-mako patchelf \
             pkg-config cmake libxcb-*-dev libgl1-mesa-dev libegl1-mesa-dev \
-            libdrm-dev glslang-tools llvm-dev flex bison
+            libdrm-dev glslang-tools llvm-dev flex bison libclc-20-dev
           pip3 install --user --upgrade meson mako packaging
           echo "$HOME/.local/bin" >> $GITHUB_PATH
           mkdir -p Dependencies/NDK
@@ -39,7 +39,7 @@ jobs:
           cd mali_build
           git clone --depth 1 --branch main https://gitlab.freedesktop.org/mesa/mesa.git
 
-      - name: Configure Mesa (minimal)
+      - name: Configure Mesa
         run: |
           cd mali_build/mesa
           cat > ../cross.txt <<EOF
