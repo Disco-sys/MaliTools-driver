@@ -10,16 +10,22 @@ mkdir -p "$WORKDIR"
 cd "$WORKDIR"
 
 sudo apt update
-sudo apt install -y python3-pip ninja-build pkg-config libelf-dev wget unzip zip
-pip3 install meson mako
+sudo apt install -y python3-pip ninja-build pkg-config libelf-dev wget unzip zip cmake libzstd-dev
+pip3 install --user meson mako
+export PATH="$HOME/.local/bin:$PATH"
 
-wget -q "https://dl.google.com/android/repository/android-ndk-${NDK_VERSION}-linux.zip"
-unzip -q "android-ndk-${NDK_VERSION}-linux.zip"
+if [ ! -d "android-ndk-${NDK_VERSION}" ]; then
+    wget -q "https://dl.google.com/android/repository/android-ndk-${NDK_VERSION}-linux.zip"
+    unzip -q "android-ndk-${NDK_VERSION}-linux.zip"
+fi
 NDK="$PWD/android-ndk-${NDK_VERSION}"
 TOOLCHAIN="$NDK/toolchains/llvm/prebuilt/linux-x86_64"
 
-git clone --depth 1 --branch "$MESA_BRANCH" "$MESA_REPO"
+if [ ! -d "mesa" ]; then
+    git clone --depth 1 --branch "$MESA_BRANCH" "$MESA_REPO"
+fi
 cd mesa
+MESA_VERSION=$(cat VERSION)
 
 cat > "$WORKDIR/cross.txt" <<EOF
 [binaries]
@@ -37,6 +43,8 @@ endian = 'little'
 
 [properties]
 needs_exe_wrapper = true
+c_args = ['-DETIME=ETIMEDOUT', '-DANDROID']
+cpp_args = ['-DETIME=ETIMEDOUT', '-DANDROID']
 EOF
 
 export CFLAGS="-DETIME=ETIMEDOUT"
@@ -46,25 +54,68 @@ meson setup build-android \
     --cross-file "$WORKDIR/cross.txt" \
     -Dplatforms=android \
     -Dvulkan-drivers=panfrost \
-    -Dgallium-drivers= \
+    -Dgallium-drivers=panfrost \
+    -Dvulkan-layers=disabled \
     -Dandroid-stub=true \
     -Dbuildtype=release \
-    -Dllvm=disabled
+    -Dllvm=disabled \
+    -Dopengl=true \
+    -Dgbm=disabled \
+    -Dglx=disabled \
+    -Degl=enabled \
+    -Dgles1=disabled \
+    -Dgles2=enabled \
+    -Dshared-glapi=enabled \
+    -Dbuild-tests=false \
+    -Dinstall-intel-gpu-tests=false \
+    -Dzstd=enabled \
+    -Dvulkan-beta=false \
+    --strip
 
-meson compile -C build-android
+meson compile -C build-android -j 2
 
-mkdir -p "$WORKDIR/panvk_pkg"
-cp build-android/src/panfrost/vulkan/libvulkan_panfrost.so "$WORKDIR/panvk_pkg/"
+PKG_PANVK="$WORKDIR/panvk_pkg"
+mkdir -p "$PKG_PANVK"
+cp build-android/src/panfrost/vulkan/libvulkan_panfrost.so "$PKG_PANVK/"
 
-cat > "$WORKDIR/panvk_pkg/meta.json" <<EOF
+cat > "$PKG_PANVK/meta.json" <<EOF
 {
   "name": "PanVK_Mali",
-  "version": "mesa-$(git rev-parse --short HEAD)",
-  "type": "vulkan"
+  "version": "$MESA_VERSION",
+  "type": "vulkan",
+  "api_version": "1.1",
+  "driver_uuid": "panvk-mali-g52",
+  "file": "libvulkan_panfrost.so"
 }
 EOF
 
 cd "$WORKDIR"
 zip -r panvk_driver.zip panvk_pkg/
 
-echo "Build successful. Artifact: $WORKDIR/panvk_driver.zip"
+PKG_GLES="$WORKDIR/mesa_nir_pkg"
+mkdir -p "$PKG_GLES"
+cp mesa/build-android/src/gallium/targets/dri/libgallium_dri.so "$PKG_GLES/"
+cp mesa/build-android/src/egl/libEGL.so "$PKG_GLES/"
+cp mesa/build-android/src/mapi/shared-glapi/libglapi.so "$PKG_GLES/"
+cp mesa/build-android/src/gles/libGLESv2.so "$PKG_GLES/"
+[ -f mesa/build-android/src/gles/libGLESv1_CM.so ] && cp mesa/build-android/src/gles/libGLESv1_CM.so "$PKG_GLES/"
+
+cat > "$PKG_GLES/meta.json" <<EOF
+{
+  "name": "Mesa_NIR_Panfrost",
+  "version": "$MESA_VERSION",
+  "type": "opengl",
+  "renderer": "panfrost",
+  "description": "OpenGL ES 2.0/3.x driver for Mali GPUs (Bifrost/Valhall)",
+  "files": ["libgallium_dri.so", "libEGL.so", "libGLESv2.so", "libglapi.so"]
+}
+EOF
+
+zip -r mesa_nir_driver.zip mesa_nir_pkg/
+
+echo "============================================================"
+echo "Build succeeded! Mesa version: $MESA_VERSION"
+echo "Artifacts:"
+echo "  Vulkan (PanVK)     : $WORKDIR/panvk_driver.zip"
+echo "  OpenGL ES (Mesa NIR): $WORKDIR/mesa_nir_driver.zip"
+echo "============================================================"
