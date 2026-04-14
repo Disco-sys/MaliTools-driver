@@ -1,4 +1,4 @@
-name: Build Mali Drivers (PanVK + Mesa NIR)
+name: Build Mali Drivers (Official Mesa Guide)
 
 on:
   push:
@@ -16,28 +16,21 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Cache APT packages
-        uses: actions/cache@v4
-        with:
-          path: /var/cache/apt/archives
-          key: apt-${{ runner.os }}-${{ hashFiles('.github/workflows/build.yml') }}
-
-      - name: Install host dependencies (no LLVM)
+      # ----- Install host dependencies as per Mesa docs -----
+      - name: Install host dependencies (official guide)
         run: |
           sudo apt-get update -y
           sudo apt-get install -y --no-install-recommends \
-            wget unzip zip ninja-build meson python3-pip python3-mako patchelf \
-            pkg-config cmake libxcb-*-dev libgl1-mesa-dev libegl1-mesa-dev \
-            libdrm-dev glslang-tools
-          pip3 install --user --upgrade pip meson mako
+            meson ninja-build python3-mako cmake pkg-config \
+            wget unzip zip patchelf \
+            libxcb-*-dev libx11-xcb-dev libxcb-dri3-dev libxcb-present-dev \
+            libxcb-sync-dev libxshmfence-dev libxxf86vm-dev libxrandr-dev \
+            libxfixes-dev libxdamage-dev libxext-dev libgl1-mesa-dev \
+            libegl1-mesa-dev libdrm-dev glslang-tools
+          pip3 install --user --upgrade meson
           echo "$HOME/.local/bin" >> $GITHUB_PATH
 
-      - name: Cache pip
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/pip
-          key: pip-${{ runner.os }}-${{ hashFiles('**/requirements.txt') }}
-
+      # ----- Cache NDK as per official cross-compile instructions -----
       - name: Cache Android NDK
         id: cache-ndk
         uses: actions/cache@v4
@@ -45,7 +38,7 @@ jobs:
           path: Dependencies/NDK
           key: ndk-${{ env.NDK_VERSION }}-api${{ env.API_LEVEL }}
 
-      - name: Download NDK (if not cached)
+      - name: Download Android NDK (if not cached)
         if: steps.cache-ndk.outputs.cache-hit != 'true'
         run: |
           mkdir -p Dependencies/NDK
@@ -56,10 +49,10 @@ jobs:
 
       - name: Setup NDK path
         run: |
-          echo "NDK_PATH=$PWD/Dependencies/NDK/android-ndk-${{ env.NDK_VERSION }}" >> $GITHUB_ENV
           echo "TOOLCHAIN=$PWD/Dependencies/NDK/android-ndk-${{ env.NDK_VERSION }}/toolchains/llvm/prebuilt/linux-x86_64" >> $GITHUB_ENV
 
-      - name: Clone Mesa (latest main)
+      # ----- Mesa source (shallow clone as per official) -----
+      - name: Clone Mesa
         run: |
           mkdir -p mali_build
           cd mali_build
@@ -71,7 +64,8 @@ jobs:
             git reset --hard FETCH_HEAD
           fi
 
-      - name: Create Meson cross file
+      # ----- Cross file exactly as described in docs -----
+      - name: Create cross file
         run: |
           mkdir -p mali_build
           cat > mali_build/cross.txt <<EOF
@@ -81,19 +75,23 @@ jobs:
           ar = '${{ env.TOOLCHAIN }}/bin/llvm-ar'
           strip = '${{ env.TOOLCHAIN }}/bin/llvm-strip'
           pkg-config = '/usr/bin/pkg-config'
+
           [host_machine]
           system = 'android'
           cpu_family = 'aarch64'
           cpu = 'armv8-a'
           endian = 'little'
+
           [built-in options]
           c_args = ['-DETIME=ETIMEDOUT', '-DANDROID']
           cpp_args = ['-DETIME=ETIMEDOUT', '-DANDROID']
+
           [properties]
           needs_exe_wrapper = true
           EOF
 
-      - name: Configure Mesa (LLVM disabled)
+      # ----- Configure exactly per official docs for Panfrost -----
+      - name: Configure Mesa (PanVK + Panfrost)
         run: |
           cd mali_build/mesa
           export CFLAGS="-DETIME=ETIMEDOUT"
@@ -102,9 +100,6 @@ jobs:
             -Dplatforms=android \
             -Dvulkan-drivers=panfrost \
             -Dgallium-drivers=panfrost \
-            -Dvulkan-layers= \
-            -Dandroid-stub=true \
-            -Dbuildtype=release \
             -Dllvm=disabled \
             -Dclc=disabled \
             -Dopengl=true \
@@ -114,40 +109,39 @@ jobs:
             -Dgles1=disabled \
             -Dgles2=enabled \
             -Dshared-glapi=enabled \
-            -Dbuild-tests=false \
-            -Dzstd=enabled \
-            -Dvulkan-beta=false \
+            -Dandroid-stub=true \
+            -Dbuildtype=release \
             --strip
 
+      # ----- Compile as per official -----
       - name: Compile Mesa
         run: |
           cd mali_build/mesa
-          meson compile -C build-android -j$(nproc)
+          ninja -C build-android -j$(nproc)
 
-      - name: Package PanVK (Vulkan)
+      # ----- Packaging (unchanged) -----
+      - name: Package PanVK
         run: |
           cd mali_build
           MESA_VERSION=$(cat mesa/VERSION)
-          PKG_V=vulkan_panfrost
-          rm -rf $PKG_V && mkdir -p $PKG_V
-          cp mesa/build-android/src/panfrost/vulkan/libvulkan_panfrost.so $PKG_V/vulkan.panfrost.so
-          patchelf --set-soname vulkan.panfrost.so $PKG_V/vulkan.panfrost.so
-          echo "{\"name\":\"PanVK\",\"version\":\"$MESA_VERSION\",\"vulkan\":{\"file\":\"vulkan.panfrost.so\",\"uuid\":\"panvk-mali\"}}" > $PKG_V/meta.json
-          zip -qr panvk_adrenotools.zip $PKG_V
+          mkdir -p vulkan_panfrost
+          cp mesa/build-android/src/panfrost/vulkan/libvulkan_panfrost.so vulkan_panfrost/vulkan.panfrost.so
+          patchelf --set-soname vulkan.panfrost.so vulkan_panfrost/vulkan.panfrost.so
+          echo "{\"name\":\"PanVK\",\"version\":\"$MESA_VERSION\",\"vulkan\":{\"file\":\"vulkan.panfrost.so\",\"uuid\":\"panvk-mali\"}}" > vulkan_panfrost/meta.json
+          zip -qr panvk_adrenotools.zip vulkan_panfrost
 
-      - name: Package Mesa NIR (OpenGL ES)
+      - name: Package Mesa NIR
         run: |
           cd mali_build
           MESA_VERSION=$(cat mesa/VERSION)
-          PKG_G=opengl_panfrost
-          rm -rf $PKG_G && mkdir -p $PKG_G
-          cp mesa/build-android/src/gallium/targets/dri/libgallium_dri.so $PKG_G/
-          cp mesa/build-android/src/egl/libEGL.so $PKG_G/
-          cp mesa/build-android/src/mapi/shared-glapi/libglapi.so $PKG_G/
-          cp mesa/build-android/src/gles/libGLESv2.so $PKG_G/
-          [ -f mesa/build-android/src/gles/libGLESv1_CM.so ] && cp mesa/build-android/src/gles/libGLESv1_CM.so $PKG_G/
-          echo "{\"name\":\"Mesa NIR\",\"version\":\"$MESA_VERSION\",\"gles\":{\"file\":\"libgallium_dri.so\"}}" > $PKG_G/meta.json
-          zip -qr mesa_nir_adrenotools.zip $PKG_G
+          mkdir -p opengl_panfrost
+          cp mesa/build-android/src/gallium/targets/dri/libgallium_dri.so opengl_panfrost/
+          cp mesa/build-android/src/egl/libEGL.so opengl_panfrost/
+          cp mesa/build-android/src/mapi/shared-glapi/libglapi.so opengl_panfrost/
+          cp mesa/build-android/src/gles/libGLESv2.so opengl_panfrost/
+          [ -f mesa/build-android/src/gles/libGLESv1_CM.so ] && cp mesa/build-android/src/gles/libGLESv1_CM.so opengl_panfrost/
+          echo "{\"name\":\"Mesa NIR\",\"version\":\"$MESA_VERSION\",\"gles\":{\"file\":\"libgallium_dri.so\"}}" > opengl_panfrost/meta.json
+          zip -qr mesa_nir_adrenotools.zip opengl_panfrost
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
