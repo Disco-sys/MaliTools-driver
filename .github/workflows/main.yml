@@ -82,29 +82,48 @@ jobs:
           EOF
           cd zink_nir_package && zip -r ../zink_nir_driver.zip . && cd ..
 
-      - name: Build PanVK driver (Vulkan fallback)
-        run: |
-          cd mesa
-          meson setup build-panvk \
-            --cross-file ../android-cross.txt \
-            -Dplatforms=android \
-            -Dvulkan-drivers=panfrost \
-            -Dgallium-drivers= \
-            -Dbuildtype=release \
-            -Dllvm=disabled \
-            -Dandroid-stub=true
-          meson compile -C build-panvk
-          mkdir -p ../panvk_package
-          cp build-panvk/src/panfrost/vulkan/libvulkan_panfrost.so ../panvk_package/
-          cd ..
-          cat > panvk_package/meta.json <<EOF
-          {
-            "name": "PanVK_Mali",
-            "version": "1.0",
-            "type": "vulkan"
-          }
-          EOF
-          cd panvk_package && zip -r ../panvk_driver.zip . && cd ..
+      - name: Build ZINK/NIR driver (MESA NIR path)
+  run: |
+    cd mesa
+    meson setup build-zink \
+      --cross-file ../android-cross.txt \
+      -Dplatforms=android \
+      -Dgallium-drivers=zink,panfrost \
+      -Dvulkan-drivers= \
+      -Dbuildtype=release \
+      -Dllvm=enabled \
+      -Dandroid-stub=true \
+      -Dgallium-opencl=disabled \
+      -Dgallium-omx=disabled \
+      -Dgallium-va=disabled \
+      -Dgallium-xa=disabled \
+      -Dtools= \
+      -Dopengl=true \
+      -Dgles1=disabled \
+      -Dgles2=disabled
+    meson compile -C build-zink
+    mkdir -p ../zink_nir_package
+    DRIVER_PATH=$(find build-zink -name "libgallium_dri.so" | head -n 1)
+    if [ -n "$DRIVER_PATH" ]; then
+      cp "$DRIVER_PATH" ../zink_nir_package/
+    else
+      echo "ERROR: libgallium_dri.so not found"
+      exit 1
+    fi
+    cd ..
+    cat > zink_nir_package/meta.json <<EOF
+    {
+      "name": "ZINK_NIR_Mali",
+      "version": "1.0",
+      "type": "opengl",
+      "env": {
+        "GALLIUM_DRIVER": "zink",
+        "ZINK_DEBUG": "spirv_compact,nir",
+        "MESA_GL_VERSION_OVERRIDE": "4.5"
+      }
+    }
+    EOF
+    cd zink_nir_package && zip -r ../zink_nir_driver.zip . && cd ..
 
       - name: Upload ZINK/NIR driver
         uses: actions/upload-artifact@v4
