@@ -1,4 +1,4 @@
-name: Build ZINK and PanVK for Mali (Stable)
+name: Build ZINK and PanVK for Mali
 
 on:
   workflow_dispatch:
@@ -40,7 +40,7 @@ jobs:
           needs_exe_wrapper = true
           EOF
 
-      - name: Clone Mesa
+      - name: Clone Mesa (main branch)
         run: git clone --depth 1 https://gitlab.freedesktop.org/mesa/mesa.git
 
       - name: Build ZINK driver (MESA NIR path)
@@ -59,7 +59,9 @@ jobs:
             -Dshared-glapi=enabled \
             -Dgles1=disabled \
             -Dgles2=disabled \
-            -Dopengl=true
+            -Dopengl=true \
+            -Dgallium-kmsro=disabled \
+            -Dlibdrm=disabled
           meson compile -C build-zink
           mkdir -p ../zink_pkg
           find build-zink -name "libgallium_dri.so" -exec cp {} ../zink_pkg/ \;
@@ -91,7 +93,8 @@ jobs:
             -Dandroid-stub=true \
             -Dglx=disabled \
             -Degl=disabled \
-            -Dshared-glapi=enabled
+            -Dshared-glapi=enabled \
+            -Dlibdrm=disabled
           meson compile -C build-panvk
           mkdir -p ../panvk_pkg
           cp build-panvk/src/panfrost/vulkan/libvulkan_panfrost.so ../panvk_pkg/
