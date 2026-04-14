@@ -7,48 +7,50 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     env:
-      NDK_VERSION: r26d          # LTS for Android 12
-      API_LEVEL: 31              # Android 12
+      NDK_VERSION: r26d
+      API_LEVEL: 31
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Cache pip packages
+      - name: Cache APT packages
+        uses: actions/cache@v4
+        with:
+          path: /var/cache/apt/archives
+          key: apt-${{ runner.os }}-${{ hashFiles('.github/workflows/build.yml') }}
+
+      - name: Install host dependencies (no LLVM)
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y --no-install-recommends \
+            wget unzip zip ninja-build meson python3-pip python3-mako patchelf \
+            pkg-config cmake libxcb-*-dev libgl1-mesa-dev libegl1-mesa-dev \
+            libdrm-dev glslang-tools
+          pip3 install --user --upgrade pip meson mako
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+
+      - name: Cache pip
         uses: actions/cache@v4
         with:
           path: ~/.cache/pip
           key: pip-${{ runner.os }}-${{ hashFiles('**/requirements.txt') }}
-          restore-keys: |
-            pip-${{ runner.os }}-
-
-      - name: Install host dependencies (with libclc-20-dev)
-        run: |
-          sudo apt-get update -y
-          sudo apt-get upgrade -y --no-install-recommends
-          sudo apt-get install -y --no-install-recommends \
-            wget unzip zip ninja-build meson python3-pip python3-mako patchelf \
-            pkg-config cmake libxcb-*-dev libgl1-mesa-dev libegl1-mesa-dev \
-            libdrm-dev glslang-tools llvm-dev libclc-20-dev
-          pip3 install --user --upgrade pip
-          pip3 install --user --upgrade meson mako
-          echo "$HOME/.local/bin" >> $GITHUB_PATH
 
       - name: Cache Android NDK
         id: cache-ndk
         uses: actions/cache@v4
         with:
           path: Dependencies/NDK
-          key: ndk-${{ env.NDK_VERSION }}-api${{ env.API_LEVEL }}-${{ runner.os }}
+          key: ndk-${{ env.NDK_VERSION }}-api${{ env.API_LEVEL }}
 
-      - name: Download Android NDK (if not cached)
+      - name: Download NDK (if not cached)
         if: steps.cache-ndk.outputs.cache-hit != 'true'
         run: |
           mkdir -p Dependencies/NDK
           cd Dependencies/NDK
-          wget --progress=bar:force https://dl.google.com/android/repository/android-ndk-${{ env.NDK_VERSION }}-linux.zip
+          wget -q https://dl.google.com/android/repository/android-ndk-${{ env.NDK_VERSION }}-linux.zip
           unzip -q android-ndk-${{ env.NDK_VERSION }}-linux.zip
           rm android-ndk-${{ env.NDK_VERSION }}-linux.zip
 
@@ -57,7 +59,7 @@ jobs:
           echo "NDK_PATH=$PWD/Dependencies/NDK/android-ndk-${{ env.NDK_VERSION }}" >> $GITHUB_ENV
           echo "TOOLCHAIN=$PWD/Dependencies/NDK/android-ndk-${{ env.NDK_VERSION }}/toolchains/llvm/prebuilt/linux-x86_64" >> $GITHUB_ENV
 
-      - name: Clone or update Mesa (latest main)
+      - name: Clone Mesa (latest main)
         run: |
           mkdir -p mali_build
           cd mali_build
@@ -67,7 +69,6 @@ jobs:
             cd mesa
             git fetch --depth 1 origin main
             git reset --hard FETCH_HEAD
-            cd ..
           fi
 
       - name: Create Meson cross file
@@ -92,7 +93,7 @@ jobs:
           needs_exe_wrapper = true
           EOF
 
-      - name: Configure Mesa
+      - name: Configure Mesa (LLVM disabled)
         run: |
           cd mali_build/mesa
           export CFLAGS="-DETIME=ETIMEDOUT"
@@ -104,7 +105,8 @@ jobs:
             -Dvulkan-layers= \
             -Dandroid-stub=true \
             -Dbuildtype=release \
-            -Dllvm=enabled \
+            -Dllvm=disabled \
+            -Dclc=disabled \
             -Dopengl=true \
             -Dgbm=disabled \
             -Dglx=disabled \
