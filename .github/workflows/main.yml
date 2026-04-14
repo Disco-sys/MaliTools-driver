@@ -67,22 +67,9 @@ jobs:
             -Dplatform-sdk-version=${{ env.PLATFORM_SDK_VERSION }} \
             -Dvulkan-drivers=panfrost \
             -Dgallium-drivers= \
-            -Dvulkan-layers= \
+            -Dllvm=disabled \
             -Dandroid-stub=true \
             -Dbuildtype=release \
-            -Dllvm=disabled \
-            -Dopencl=disabled \
-            -Dgallium-opencl=disabled \
-            -Dopengl=false \
-            -Dgbm=disabled \
-            -Dglx=disabled \
-            -Degl=disabled \
-            -Dgles1=disabled \
-            -Dgles2=disabled \
-            -Dshared-glapi=disabled \
-            -Dbuild-tests=false \
-            -Dzstd=enabled \
-            -Dvulkan-beta=false \
             --strip
           meson compile -C build-android -j$(nproc)
 
