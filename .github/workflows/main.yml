@@ -11,69 +11,35 @@ jobs:
     env:
       NDK_VERSION: r26d
       API_LEVEL: 31
+      PLATFORM_SDK_VERSION: 34
 
     steps:
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Cache APT packages
-        uses: actions/cache@v4
-        with:
-          path: /var/cache/apt/archives
-          key: apt-${{ runner.os }}-${{ hashFiles('.github/workflows/build.yml') }}
-
-      - name: Install host dependencies
+      - name: Install deps and NDK
         run: |
           sudo apt-get update -y
           sudo apt-get install -y --no-install-recommends \
             wget unzip zip ninja-build meson python3-pip python3-mako patchelf \
             pkg-config cmake libxcb-*-dev libgl1-mesa-dev libegl1-mesa-dev \
-            libdrm-dev glslang-tools llvm-dev
-          pip3 install --user --upgrade pip meson mako
+            libdrm-dev glslang-tools llvm-dev flex bison
+          pip3 install --user --upgrade meson mako packaging
           echo "$HOME/.local/bin" >> $GITHUB_PATH
-
-      - name: Cache pip packages
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/pip
-          key: pip-${{ runner.os }}-${{ hashFiles('**/requirements.txt') }}
-
-      - name: Cache Android NDK
-        id: cache-ndk
-        uses: actions/cache@v4
-        with:
-          path: Dependencies/NDK
-          key: ndk-${{ env.NDK_VERSION }}-api${{ env.API_LEVEL }}
-
-      - name: Download Android NDK
-        if: steps.cache-ndk.outputs.cache-hit != 'true'
-        run: |
           mkdir -p Dependencies/NDK
           cd Dependencies/NDK
           wget -q https://dl.google.com/android/repository/android-ndk-${{ env.NDK_VERSION }}-linux.zip
           unzip -q android-ndk-${{ env.NDK_VERSION }}-linux.zip
           rm android-ndk-${{ env.NDK_VERSION }}-linux.zip
+          echo "TOOLCHAIN=$PWD/android-ndk-${{ env.NDK_VERSION }}/toolchains/llvm/prebuilt/linux-x86_64" >> $GITHUB_ENV
 
-      - name: Setup NDK toolchain path
-        run: |
-          echo "TOOLCHAIN=$PWD/Dependencies/NDK/android-ndk-${{ env.NDK_VERSION }}/toolchains/llvm/prebuilt/linux-x86_64" >> $GITHUB_ENV
-
-      - name: Clone Mesa source
+      - name: Build PanVK
         run: |
           mkdir -p mali_build
           cd mali_build
-          if [ ! -d mesa ]; then
-            git clone --depth 1 --branch main https://gitlab.freedesktop.org/mesa/mesa.git
-          else
-            cd mesa
-            git fetch --depth 1 origin main
-            git reset --hard FETCH_HEAD
-          fi
-
-      - name: Generate cross compile file
-        run: |
-          mkdir -p mali_build
-          cat > mali_build/cross.txt <<EOF
+          git clone --depth 1 --branch main https://gitlab.freedesktop.org/mesa/mesa.git
+          cd mesa
+          cat > ../cross.txt <<EOF
           [binaries]
           c = '${{ env.TOOLCHAIN }}/bin/aarch64-linux-android${{ env.API_LEVEL }}-clang'
           cpp = '${{ env.TOOLCHAIN }}/bin/aarch64-linux-android${{ env.API_LEVEL }}-clang++'
@@ -94,38 +60,31 @@ jobs:
           [properties]
           needs_exe_wrapper = true
           EOF
-
-      - name: Configure Mesa
-        run: |
-          cd mali_build/mesa
           export CFLAGS="-DETIME=ETIMEDOUT"
           export CXXFLAGS="-DETIME=ETIMEDOUT"
           meson setup build-android --cross-file ../cross.txt \
             -Dplatforms=android \
+            -Dplatform-sdk-version=${{ env.PLATFORM_SDK_VERSION }} \
             -Dvulkan-drivers=panfrost \
-            -Dgallium-drivers=panfrost \
+            -Dgallium-drivers= \
             -Dvulkan-layers= \
             -Dandroid-stub=true \
             -Dbuildtype=release \
             -Dllvm=enabled \
-            -Dopengl=true \
+            -Dopengl=false \
             -Dgbm=disabled \
             -Dglx=disabled \
-            -Degl=enabled \
+            -Degl=disabled \
             -Dgles1=disabled \
-            -Dgles2=enabled \
-            -Dshared-glapi=enabled \
+            -Dgles2=disabled \
+            -Dshared-glapi=disabled \
             -Dbuild-tests=false \
             -Dzstd=enabled \
             -Dvulkan-beta=false \
             --strip
-
-      - name: Compile Mesa
-        run: |
-          cd mali_build/mesa
           meson compile -C build-android -j$(nproc)
 
-      - name: Package Vulkan driver
+      - name: Package
         run: |
           cd mali_build
           MESA_VERSION=$(cat mesa/VERSION)
@@ -135,23 +94,8 @@ jobs:
           echo "{\"name\":\"PanVK\",\"version\":\"$MESA_VERSION\",\"vulkan\":{\"file\":\"vulkan.panfrost.so\",\"uuid\":\"panvk-mali\"}}" > vulkan_panfrost/meta.json
           zip -qr panvk_adrenotools.zip vulkan_panfrost
 
-      - name: Package OpenGL ES driver
-        run: |
-          cd mali_build
-          MESA_VERSION=$(cat mesa/VERSION)
-          mkdir -p opengl_panfrost
-          cp mesa/build-android/src/gallium/targets/dri/libgallium_dri.so opengl_panfrost/
-          cp mesa/build-android/src/egl/libEGL.so opengl_panfrost/
-          cp mesa/build-android/src/mapi/shared-glapi/libglapi.so opengl_panfrost/
-          cp mesa/build-android/src/gles/libGLESv2.so opengl_panfrost/
-          [ -f mesa/build-android/src/gles/libGLESv1_CM.so ] && cp mesa/build-android/src/gles/libGLESv1_CM.so opengl_panfrost/
-          echo "{\"name\":\"Mesa NIR\",\"version\":\"$MESA_VERSION\",\"gles\":{\"file\":\"libgallium_dri.so\"}}" > opengl_panfrost/meta.json
-          zip -qr mesa_nir_adrenotools.zip opengl_panfrost
-
-      - name: Upload artifacts
+      - name: Upload
         uses: actions/upload-artifact@v4
         with:
-          name: mali-drivers
-          path: |
-            mali_build/panvk_adrenotools.zip
-            mali_build/mesa_nir_adrenotools.zip
+          name: panvk-driver
+          path: mali_build/panvk_adrenotools.zip
