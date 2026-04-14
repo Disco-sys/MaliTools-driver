@@ -58,7 +58,7 @@ endian = 'little'
 needs_exe_wrapper = true
 EOF
 
-# Build ZINK driver (disable drm and zstd)
+# Build ZINK driver
 meson setup build-zink \
     --cross-file "$WORKDIR/cross.txt" \
     -Dplatforms=android \
@@ -70,7 +70,7 @@ meson setup build-zink \
     -Dglx=disabled \
     -Dshared-glapi=enabled \
     -Dzstd=disabled \
-    -Dlibdrm=disabled \
+    -Ddrm=disabled \
     -Dc_args="-DETIME=ETIMEDOUT"
 
 meson compile -C build-zink
@@ -92,7 +92,7 @@ cat > "$WORKDIR/zink_pkg/meta.json" <<EOF
 }
 EOF
 
-# Build PanVK driver (disable drm and zstd)
+# Build PanVK driver
 meson setup build-panvk \
     --cross-file "$WORKDIR/cross.txt" \
     -Dplatforms=android \
@@ -104,7 +104,7 @@ meson setup build-panvk \
     -Dglx=disabled \
     -Dshared-glapi=enabled \
     -Dzstd=disabled \
-    -Dlibdrm=disabled \
+    -Ddrm=disabled \
     -Dc_args="-DETIME=ETIMEDOUT"
 
 meson compile -C build-panvk
