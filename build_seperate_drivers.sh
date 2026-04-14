@@ -52,8 +52,10 @@ meson setup build-android \
   -Dvulkan-drivers=panfrost \
   -Dbuildtype=release \
   -Dllvm=disabled \
-  -Dgallium-opencl=disabled \
-  -Dopencl=disabled
+  -Dopencl=disabled \
+  -Dglx=disabled \
+  -Dgles1=disabled \
+  -Dgles2=disabled
 
 meson compile -C build-android
 
