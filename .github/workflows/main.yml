@@ -16,7 +16,7 @@ jobs:
         run: |
           git clone --depth 1 --branch main https://gitlab.freedesktop.org/mesa/mesa.git mesa
 
-      - name: Install host dependencies
+      - name: Install dependencies
         run: |
           sudo apt-get update -y
           sudo apt-get install -y --no-install-recommends \
@@ -26,8 +26,6 @@ jobs:
             pkg-config \
             python3 \
             python3-pip \
-            llvm-dev \
-            libclc-20-dev \
             wget \
             unzip \
             zip \
@@ -37,24 +35,18 @@ jobs:
             libgl1-mesa-dev \
             libdrm-dev
 
-      - name: Install Meson and Mako
-        run: pip3 install --user meson mako packaging
+          pip3 install --user meson mako packaging
 
-      - name: Download Android NDK
-        run: |
           mkdir -p $HOME/ndk
           cd $HOME/ndk
           wget -q https://dl.google.com/android/repository/android-ndk-${NDK_VERSION}-linux.zip
           unzip -q android-ndk-${NDK_VERSION}-linux.zip
           echo "TOOLCHAIN=$HOME/ndk/android-ndk-${NDK_VERSION}/toolchains/llvm/prebuilt/linux-x86_64" >> $GITHUB_ENV
 
-      - name: Configure Mesa for PanVK
+      - name: Configuring and compiling Mesa
         run: |
-          # Confirm Mesa source was cloned
           test -f mesa/meson.build || { echo "ERROR: mesa/meson.build missing!"; exit 1; }
-
           cd mesa
-          echo "Configuring in: $(pwd)"
 
           cat > cross-android.txt <<EOF
           [binaries]
@@ -83,14 +75,14 @@ jobs:
             -Dplatform-sdk-version=$PLATFORM_SDK_VERSION \
             -Dvulkan-drivers=panfrost \
             -Dgallium-drivers= \
-            -Dllvm=enabled \
+            -Dllvm=disabled \
+            -Dopencl=disabled \
+            -Dgallium-opencl=disabled \
+            -Dmicrosoft-clc=disabled \
             -Dandroid-stub=true \
             -Dbuildtype=release \
             --strip
 
-      - name: Build PanVK driver
-        run: |
-          cd mesa
           meson compile -C build-android src/panfrost/vulkan/libvulkan_panfrost.so
 
       - name: Package driver
