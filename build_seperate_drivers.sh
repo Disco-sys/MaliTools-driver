@@ -1,117 +1,71 @@
 #!/bin/bash -e
 
 WORKDIR="$PWD/mali_build"
-NDK_VERSION="r25c"
-API_LEVEL="31"
+NDK_VERSION="r27c"
+API_LEVEL="26"
 MESA_REPO="https://gitlab.freedesktop.org/mesa/mesa.git"
 MESA_BRANCH="main"
 
 mkdir -p "$WORKDIR"
 cd "$WORKDIR"
 
+# 1. Install dependencies
 sudo apt update
-sudo apt install -y \
-    python3-pip ninja-build pkg-config libelf-dev wget unzip zip \
-    liblz4-dev libssl-dev \
-    libx11-dev libxext-dev libxdamage-dev libxfixes-dev libxrandr-dev \
-    libxcb-glx0-dev libxcb-shm0-dev libxcb-dri2-0-dev libxcb-dri3-dev \
-    libxcb-present-dev libxcb-sync-dev libxshmfence-dev \
-    libxxf86vm-dev libxinerama-dev libxcursor-dev \
-    libwayland-dev wayland-protocols \
-    libgl1-mesa-dev libglu1-mesa-dev \
-    flex bison \
-    libunwind-dev \
-    libva-dev libvdpau-dev \
-    libomxil-bellagio-dev \
-    libvulkan-dev \
-    libxml2-dev \
-    libglvnd-dev \
-    libsensors-dev \
-    libpciaccess-dev
-
-pip3 install --upgrade pip
+sudo apt install -y python3-pip ninja-build pkg-config libelf-dev wget unzip zip
 pip3 install meson mako
 
+# 2. Download and set up the NDK (r27c is known to work)
 wget -q "https://dl.google.com/android/repository/android-ndk-${NDK_VERSION}-linux.zip"
 unzip -q "android-ndk-${NDK_VERSION}-linux.zip"
 NDK="$PWD/android-ndk-${NDK_VERSION}"
 TOOLCHAIN="$NDK/toolchains/llvm/prebuilt/linux-x86_64"
+export PATH=$TOOLCHAIN/bin:$PATH
 
+# 3. Clone Mesa (the same source the community uses)
 git clone --depth 1 --branch "$MESA_BRANCH" "$MESA_REPO"
 cd mesa
 
-cat > "$WORKDIR/cross.txt" <<EOF
+# 4. Create the cross-compilation file (based on the official docs)
+cat > "$WORKDIR/android-aarch64.txt" <<EOF
+[constants]
+ndk_path = '$NDK'
+
 [binaries]
-c = '$TOOLCHAIN/bin/aarch64-linux-android${API_LEVEL}-clang'
-cpp = '$TOOLCHAIN/bin/aarch64-linux-android${API_LEVEL}-clang++'
-ar = '$TOOLCHAIN/bin/llvm-ar'
-strip = '$TOOLCHAIN/bin/llvm-strip'
+ar = ndk_path / 'toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'
+c = ['ccache', ndk_path / 'toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android${API_LEVEL}-clang']
+cpp = ['ccache', ndk_path / 'toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android${API_LEVEL}-clang++', '-fno-exceptions', '-fno-unwind-tables', '-fno-asynchronous-unwind-tables', '-static-libstdc++']
+c_ld = 'lld'
+cpp_ld = 'lld'
+strip = ndk_path / 'toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip'
 pkg-config = '/usr/bin/pkg-config'
 
 [host_machine]
 system = 'android'
 cpu_family = 'aarch64'
-cpu = 'armv8-a'
+cpu = 'armv8'
 endian = 'little'
-
-[properties]
-needs_exe_wrapper = true
 EOF
 
-# Build ZINK driver
-meson setup build-zink \
-    --cross-file "$WORKDIR/cross.txt" \
-    -Dplatforms=android \
-    -Dgallium-drivers=zink \
-    -Dvulkan-drivers= \
-    -Dbuildtype=release \
-    -Dllvm=disabled \
-    -Dandroid-stub=true \
-    -Dglx=disabled \
-    -Dshared-glapi=enabled \
-    -Dzstd=disabled \
-    -Ddrm=disabled \
-    -Dc_args="-DETIME=ETIMEDOUT"
+# 5. Configure the build with the correct, documented options
+meson setup build-android \
+  --cross-file "$WORKDIR/android-aarch64.txt" \
+  -Dplatforms=android \
+  -Dplatform-sdk-version=26 \
+  -Dandroid-stub=true \
+  -Degl=disabled \
+  -Dgallium-drivers= \
+  -Dvulkan-drivers=panfrost \
+  -Dbuildtype=release \
+  -Dllvm=disabled
 
-meson compile -C build-zink
+# 6. Build the driver
+meson compile -C build-android
 
-mkdir -p "$WORKDIR/zink_pkg"
-DRIVER_PATH=$(find build-zink -name "libgallium_dri.so" | head -1)
-cp "$DRIVER_PATH" "$WORKDIR/zink_pkg/"
-
-cat > "$WORKDIR/zink_pkg/meta.json" <<EOF
-{
-  "name": "ZINK_MESA_NIR_Mali",
-  "version": "mesa-$(git rev-parse --short HEAD)",
-  "type": "opengl",
-  "env": {
-    "GALLIUM_DRIVER": "zink",
-    "ZINK_DEBUG": "spirv_compact,nir",
-    "MESA_GL_VERSION_OVERRIDE": "4.5"
-  }
-}
-EOF
-
-# Build PanVK driver
-meson setup build-panvk \
-    --cross-file "$WORKDIR/cross.txt" \
-    -Dplatforms=android \
-    -Dvulkan-drivers=panfrost \
-    -Dgallium-drivers= \
-    -Dbuildtype=release \
-    -Dllvm=disabled \
-    -Dandroid-stub=true \
-    -Dglx=disabled \
-    -Dshared-glapi=enabled \
-    -Dzstd=disabled \
-    -Ddrm=disabled \
-    -Dc_args="-DETIME=ETIMEDOUT"
-
-meson compile -C build-panvk
-
+# 7. Package the resulting library
 mkdir -p "$WORKDIR/panvk_pkg"
-cp build-panvk/src/panfrost/vulkan/libvulkan_panfrost.so "$WORKDIR/panvk_pkg/"
+cp build-android/src/panfrost/vulkan/libvulkan_panfrost.so "$WORKDIR/panvk_pkg/"
 
+# 8. Create a meta.json file for Winlator (based on your existing package)
 cat > "$WORKDIR/panvk_pkg/meta.json" <<EOF
 {
   "name": "PanVK_Mali",
@@ -120,10 +74,8 @@ cat > "$WORKDIR/panvk_pkg/meta.json" <<EOF
 }
 EOF
 
+# 9. Zip it up
 cd "$WORKDIR"
-zip -r zink_mesa_nir_driver.zip zink_pkg/
 zip -r panvk_driver.zip panvk_pkg/
 
-echo "Build successful. Artifacts:"
-echo "  - $WORKDIR/zink_mesa_nir_driver.zip"
-echo "  - $WORKDIR/panvk_driver.zip"
+echo "Build successful. Artifact: $WORKDIR/panvk_driver.zip"
