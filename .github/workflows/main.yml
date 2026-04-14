@@ -35,82 +35,100 @@ jobs:
         ndk-version: r27b
 
     - name: Generate Stubs and Cross File
-      run: |
-        mkdir -p ${{ github.workspace }}/installed/pkgconfig
-        
-        # Stubs for secondary dependencies
-        for pkg in libdrm libudev libzstd libclc; do
-          cat <<EOF > ${{ github.workspace }}/installed/pkgconfig/$pkg.pc
-        Name: $pkg
-        Description: Android Stub for $pkg
-        Version: 99.9.9
-        Cflags: -I/usr/include
-        Libs: -L${{ github.workspace }}/installed
-        EOF
-        done
+  run: |
+    mkdir -p ${{ github.workspace }}/installed/pkgconfig
+    
+    # Stubs for secondary dependencies
+    for pkg in libdrm libudev libzstd libclc; do
+      cat <<EOF > ${{ github.workspace }}/installed/pkgconfig/$pkg.pc
+    Name: $pkg
+    Description: Android Stub for $pkg
+    Version: 99.9.9
+    Cflags: -I/usr/include
+    Libs: -L${{ github.workspace }}/installed
+    EOF
+    done
 
-        # Version-specific stub for LLVMSPIRVLib (< 18.2)
-        cat <<EOF > ${{ github.workspace }}/installed/pkgconfig/LLVMSPIRVLib.pc
-        Name: LLVMSPIRVLib
-        Description: Android Stub for LLVMSPIRVLib
-        Version: 18.1.0
-        Cflags: -I/usr/include
-        Libs: -L${{ github.workspace }}/installed
-        EOF
+    # Stub for LLVMSPIRVLib
+    cat <<EOF > ${{ github.workspace }}/installed/pkgconfig/LLVMSPIRVLib.pc
+    Name: LLVMSPIRVLib
+    Description: Android Stub for LLVMSPIRVLib
+    Version: 18.1.0
+    Cflags: -I/usr/include
+    Libs: -L${{ github.workspace }}/installed
+    EOF
 
-        # Creating the Cross File with Rust support
-        NDK_PATH="${{ steps.setup_ndk.outputs.ndk-path }}"
-        TOOLCHAIN="$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64"
-        SYSROOT="$TOOLCHAIN/sysroot"
-        
-        cat <<EOF > android-aarch64.txt
-        [binaries]
-        c = '$TOOLCHAIN/bin/aarch64-linux-android35-clang'
-        cpp = '$TOOLCHAIN/bin/aarch64-linux-android35-clang++'
-        rust = ['rustc', '--target', 'aarch64-linux-android']
-        ar = '$TOOLCHAIN/bin/llvm-ar'
-        strip = '$TOOLCHAIN/bin/llvm-strip'
-        pkg-config = '/usr/bin/pkg-config'
-        llvm-config = '/usr/bin/llvm-config-18'
+    # Create Cross File with Corrected Paths
+    NDK_PATH="${{ steps.setup_ndk.outputs.ndk-path }}"
+    TOOLCHAIN="${NDK_PATH}/toolchains/llvm/prebuilt/linux-x86_64"
+    SYSROOT="${TOOLCHAIN}/sysroot"
+    
+    # Use aarch64-linux-android21 for broader compatibility
+    TARGET_TRIPLE="aarch64-linux-android21"
+    
+    cat <<EOF > android-aarch64.txt
+    [binaries]
+    c = '${TOOLCHAIN}/bin/${TARGET_TRIPLE}-clang'
+    cpp = '${TOOLCHAIN}/bin/${TARGET_TRIPLE}-clang++'
+    ar = '${TOOLCHAIN}/bin/llvm-ar'
+    strip = '${TOOLCHAIN}/bin/llvm-strip'
+    pkg-config = '/usr/bin/pkg-config'
+    llvm-config = '/usr/bin/llvm-config-18'
 
-        [host_machine]
-        system = 'android'
-        cpu_family = 'aarch64'
-        cpu = 'armv8-a'
-        endian = 'little'
+    [host_machine]
+    system = 'android'
+    cpu_family = 'aarch64'
+    cpu = 'armv8-a'
+    endian = 'little'
 
-        [properties]
-        needs_exe_wrapper = true
-        pkg_config_libdir = ['${{ github.workspace }}/installed/pkgconfig', '$SYSROOT/usr/lib/aarch64-linux-android/pkgconfig']
-        EOF
+    [properties]
+    needs_exe_wrapper = true
+    # Add both stub and system pkgconfig paths
+    pkg_config_libdir = ['${{ github.workspace }}/installed/pkgconfig', '${SYSROOT}/usr/lib/aarch64-linux-android/pkgconfig']
+    
+    # Disable Rust for initial build to reduce complexity
+    intel_clc = 'intel-clc' 
+    EOF
 
-    - name: Compile MESA Driver (Mali-G52 + Rust Optimized)
-      run: |
-        python -m venv venv
-        source venv/bin/activate
-        pip install "meson>=1.4.0" "mako>=1.2.0" "packaging==23.2" PyYAML
-        
-        export PKG_CONFIG_PATH="${{ github.workspace }}/installed/pkgconfig"
-        
-        cd mesa-src
-        meson setup build-android \
-          --cross-file ../android-aarch64.txt \
-          -Dplatforms=android \
-          -Dplatform-sdk-version=35 \
-          -Dgallium-drivers=panfrost,zink \
-          -Dvulkan-drivers=panfrost \
-          -Dfreedreno-kmds= \
-          -Dbuildtype=release \
-          -Db_lto=false \
-          -Dllvm=enabled \
-          -Dandroid-stub=true \
-          -Dpanfrost-rust=enabled \
-          -Dopengl=true \
-          -Dgles1=enabled \
-          -Dgles2=enabled \
-          -Dglvnd=disabled
-          
-        meson compile -C build-android
+    # Print cross file for debugging
+    echo "=== Generated android-aarch64.txt ==="
+    cat android-aarch64.txt
+
+    - name: Compile MESA Driver (Mali-G52)
+  run: |
+    # Ensure Python virtual env is set up
+    python -m venv venv
+    source venv/bin/activate
+    pip install "meson>=1.4.0" "mako>=1.2.0" "packaging==23.2" PyYAML
+    
+    export PKG_CONFIG_PATH="${{ github.workspace }}/installed/pkgconfig"
+    
+    cd mesa-src
+    
+    # **DIAGNOSTIC STEP:** Print the meson cross-file information to the log.
+    # This is CRITICAL for debugging future failures.
+    meson --cross-file ../android-aarch64.txt --help
+    
+    # Configure the build
+    meson setup build-android \
+      --cross-file ../android-aarch64.txt \
+      -Dplatforms=android \
+      -Dplatform-sdk-version=35 \
+      -Dgallium-drivers=panfrost,zink \
+      -Dvulkan-drivers=panfrost \
+      -Dfreedreno-kmds= \
+      -Dbuildtype=release \
+      -Db_lto=false \
+      -Dllvm=enabled \
+      -Dandroid-stub=true \
+      -Dopengl=true \
+      -Dgles1=enabled \
+      -Dgles2=enabled \
+      -Dglvnd=disabled \
+      -Drust_std=disabled
+      
+    # Compile
+    meson compile -C build-android -v
 
     - name: Upload Driver Artifacts
       uses: actions/upload-artifact@v4
