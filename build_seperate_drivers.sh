@@ -9,11 +9,10 @@ MESA_BRANCH="main"
 mkdir -p "$WORKDIR"
 cd "$WORKDIR"
 
-# Install host dependencies (including libzstd-dev for the host pkg-config)
 sudo apt update
 sudo apt install -y \
     python3-pip ninja-build pkg-config libelf-dev wget unzip zip \
-    libzstd-dev liblz4-dev libssl-dev libdrm-dev \
+    liblz4-dev libssl-dev libdrm-dev \
     libx11-dev libxext-dev libxdamage-dev libxfixes-dev libxrandr-dev \
     libxcb-glx0-dev libxcb-shm0-dev libxcb-dri2-0-dev libxcb-dri3-dev \
     libxcb-present-dev libxcb-sync-dev libxshmfence-dev \
@@ -33,17 +32,14 @@ sudo apt install -y \
 pip3 install --upgrade pip
 pip3 install meson mako
 
-# Download NDK r25c
 wget -q "https://dl.google.com/android/repository/android-ndk-${NDK_VERSION}-linux.zip"
 unzip -q "android-ndk-${NDK_VERSION}-linux.zip"
 NDK="$PWD/android-ndk-${NDK_VERSION}"
 TOOLCHAIN="$NDK/toolchains/llvm/prebuilt/linux-x86_64"
 
-# Clone Mesa
 git clone --depth 1 --branch "$MESA_BRANCH" "$MESA_REPO"
 cd mesa
 
-# Create cross file (no manual CFLAGS)
 cat > "$WORKDIR/cross.txt" <<EOF
 [binaries]
 c = '$TOOLCHAIN/bin/aarch64-linux-android${API_LEVEL}-clang'
@@ -62,7 +58,7 @@ endian = 'little'
 needs_exe_wrapper = true
 EOF
 
-# Build ZINK driver
+# Build ZINK driver (with zstd disabled)
 meson setup build-zink \
     --cross-file "$WORKDIR/cross.txt" \
     -Dplatforms=android \
@@ -73,7 +69,7 @@ meson setup build-zink \
     -Dandroid-stub=true \
     -Dglx=disabled \
     -Dshared-glapi=enabled \
-    -Dzstd=enabled \
+    -Dzstd=disabled \
     -Dc_args="-DETIME=ETIMEDOUT"
 
 meson compile -C build-zink
@@ -95,7 +91,7 @@ cat > "$WORKDIR/zink_pkg/meta.json" <<EOF
 }
 EOF
 
-# Build PanVK driver
+# Build PanVK driver (with zstd disabled)
 meson setup build-panvk \
     --cross-file "$WORKDIR/cross.txt" \
     -Dplatforms=android \
@@ -106,7 +102,7 @@ meson setup build-panvk \
     -Dandroid-stub=true \
     -Dglx=disabled \
     -Dshared-glapi=enabled \
-    -Dzstd=enabled \
+    -Dzstd=disabled \
     -Dc_args="-DETIME=ETIMEDOUT"
 
 meson compile -C build-panvk
