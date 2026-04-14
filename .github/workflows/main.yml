@@ -5,56 +5,108 @@ permissions:
   contents: read
 
 jobs:
-  macOS-CI:
-    strategy:
-      matrix:
-        glx_option: ['dri', 'xlib']
-    runs-on: macos-11
+  build:
+    runs-on: ubuntu-latest
     env:
-      GALLIUM_DUMP_CPU: true
-      MESON_EXEC: /Users/runner/Library/Python/3.11/bin/meson
+      NDK_VERSION: r29
+      API_LEVEL: 31
+      PLATFORM_SDK_VERSION: 34
     steps:
-    - name: Checkout
-      uses: actions/checkout@v3
-    - name: Install Dependencies
-      run: |
-        cat > Brewfile <<EOL
-        brew "bison"
-        brew "expat"
-        brew "gettext"
-        brew "libx11"
-        brew "libxcb"
-        brew "libxdamage"
-        brew "libxext"
-        brew "molten-vk"
-        brew "ninja"
-        brew "pkg-config"
-        brew "python@3.10"
-        EOL
-
-        brew update
-        brew bundle --verbose
-    - name: Install Mako and meson
-      run: pip3 install --user mako meson
-    - name: Configure
-      run: |
-        cat > native_config <<EOL
-        [binaries]
-        llvm-config = '/usr/local/opt/llvm/bin/llvm-config'
-        EOL
-        $MESON_EXEC . build --native-file=native_config -Dmoltenvk-dir=$(brew --prefix molten-vk) -Dbuild-tests=true -Dgallium-drivers=swrast,zink -Dglx=${{ matrix.glx_option }}
-    - name: Build
-      run: $MESON_EXEC compile -C build
-    - name: Test
-      run: $MESON_EXEC test -C build --print-errorlogs
-    - name: Install
-      run: $MESON_EXEC install -C build --destdir $PWD/install
-    - name: 'Upload Artifact'
-      if: always()
-      uses: actions/upload-artifact@v3
+    - name: Checkout Mesa 26.1 (main branch)
+      uses: actions/checkout@v4
       with:
-        name: macos-${{ matrix.glx_option }}-result
-        path: |
-          build/meson-logs/
-          install/
+        repository: 'mesa/mesa'
+        ref: 'main'
+
+    - name: Install Dependencies (Ubuntu)
+      run: |
+        sudo apt-get update -y
+        sudo apt-get install -y --no-install-recommends \
+          bison \
+          flex \
+          expat \
+          gettext \
+          libx11-dev \
+          libxcb1-dev \
+          libxdamage-dev \
+          libxext-dev \
+          ninja-build \
+          pkg-config \
+          python3 \
+          python3-pip \
+          llvm-dev \
+          libclc-20-dev \
+          wget \
+          unzip \
+          zip \
+          patchelf
+
+    - name: Install Mako and meson
+      run: pip3 install --user mako meson packaging
+
+    - name: Download Android NDK
+      run: |
+        mkdir -p $HOME/ndk
+        cd $HOME/ndk
+        wget -q https://dl.google.com/android/repository/android-ndk-${NDK_VERSION}-linux.zip
+        unzip -q android-ndk-${NDK_VERSION}-linux.zip
+        echo "TOOLCHAIN=$HOME/ndk/android-ndk-${NDK_VERSION}/toolchains/llvm/prebuilt/linux-x86_64" >> $GITHUB_ENV
+
+    - name: Configure Mesa for PanVK and Mesa NIR
+      run: |
+        cat > cross-android.txt <<EOF
+        [binaries]
+        c = '${TOOLCHAIN}/bin/aarch64-linux-android${API_LEVEL}-clang'
+        cpp = '${TOOLCHAIN}/bin/aarch64-linux-android${API_LEVEL}-clang++'
+        ar = '${TOOLCHAIN}/bin/llvm-ar'
+        strip = '${TOOLCHAIN}/bin/llvm-strip'
+        pkg-config = '/usr/bin/pkg-config'
+
+        [host_machine]
+        system = 'android'
+        cpu_family = 'aarch64'
+        cpu = 'armv8-a'
+        endian = 'little'
+
+        [built-in options]
+        c_args = ['-DETIME=ETIMEDOUT', '-DANDROID']
+        cpp_args = ['-DETIME=ETIMEDOUT', '-DANDROID']
+
+        [properties]
+        needs_exe_wrapper = true
+        EOF
+
+        meson setup build-android --cross-file cross-android.txt \
+          -Dplatforms=android \
+          -Dplatform-sdk-version=$PLATFORM_SDK_VERSION \
+          -Dvulkan-drivers=panfrost \
+          -Dgallium-drivers=panfrost \
+          -Dllvm=enabled \
+          -Dandroid-stub=true \
+          -Dbuildtype=release \
+          --strip
+
+    - name: Build PanVK and Mesa NIR
+      run: |
+        meson compile -C build-android
+
+    - name: Package drivers
+      run: |
+        mkdir -p install
+        # Vulkan
+        cp build-android/src/panfrost/vulkan/libvulkan_panfrost.so install/
+        # OpenGL ES
+        cp build-android/src/gallium/targets/dri/libgallium_dri.so install/
+        cp build-android/src/egl/libEGL.so install/
+        cp build-android/src/mapi/shared-glapi/libglapi.so install/
+        cp build-android/src/gles/libGLESv2.so install/
+        cd install
+        zip -r mali-drivers.zip *.so
+
+    - name: Upload Artifact
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: mali-drivers
+        path: install/mali-drivers.zip
         retention-days: 5
