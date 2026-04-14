@@ -1,34 +1,40 @@
 #!/bin/bash
 set -e
 
-WORKDIR="$PWD/mali_build"
-DEPS_DIR="$PWD/Dependencies"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+WORKDIR="$SCRIPT_DIR/mali_build"
+DEPS_DIR="$SCRIPT_DIR/Dependencies"
 NDK_DIR="$DEPS_DIR/NDK"
 NDK_VERSION="r28"
 API_LEVEL="28"
 MESA_BRANCH="main"
 
+# Create all needed directories upfront
 mkdir -p "$WORKDIR" "$NDK_DIR"
 
-# --- SYSTEM DEPS (verbose) ---
+# ---------- SYSTEM DEPS ----------
 sudo apt-get update -y
 sudo apt-get install -y --show-progress --no-install-recommends \
     wget unzip zip ninja-build meson python3-pip python3-mako patchelf \
     pkg-config cmake libxcb-*-dev libgl1-mesa-dev libegl1-mesa-dev libdrm-dev
-pip3 install --user --upgrade --progress-bar on meson mako
+pip3 install --user --upgrade meson mako
 export PATH="$HOME/.local/bin:$PATH"
 
-# --- CACHED NDK ---
+# ---------- CACHED NDK ----------
 NDK_PATH="$NDK_DIR/android-ndk-$NDK_VERSION"
 if [ ! -d "$NDK_PATH" ]; then
+    echo "Downloading NDK to $NDK_DIR ..."
     cd "$NDK_DIR"
     wget --progress=bar:force "https://dl.google.com/android/repository/android-ndk-${NDK_VERSION}-linux.zip"
     unzip -q "android-ndk-${NDK_VERSION}-linux.zip"
     rm "android-ndk-${NDK_VERSION}-linux.zip"
+    echo "NDK installed at $NDK_PATH"
+else
+    echo "Using cached NDK at $NDK_PATH"
 fi
 TOOLCHAIN="$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64"
 
-# --- MESA (shallow, update if exists) ---
+# ---------- MESA ----------
 cd "$WORKDIR"
 if [ ! -d mesa ]; then
     git clone --depth 1 --branch "$MESA_BRANCH" https://gitlab.freedesktop.org/mesa/mesa.git
@@ -38,7 +44,7 @@ fi
 cd mesa
 MESA_VERSION=$(cat VERSION)
 
-# --- CROSS FILE ---
+# ---------- CROSS FILE ----------
 cat > "$WORKDIR/android-aarch64" <<EOF
 [binaries]
 c = '$TOOLCHAIN/bin/aarch64-linux-android${API_LEVEL}-clang'
@@ -61,7 +67,7 @@ EOF
 export CFLAGS="-DETIME=ETIMEDOUT"
 export CXXFLAGS="-DETIME=ETIMEDOUT"
 
-# --- CONFIGURE & COMPILE ---
+# ---------- BUILD ----------
 meson setup build-android --cross-file "$WORKDIR/android-aarch64" \
     -Dplatforms=android -Dvulkan-drivers=panfrost -Dgallium-drivers=panfrost \
     -Dvulkan-layers= -Dandroid-stub=true -Dbuildtype=release -Dllvm=disabled \
@@ -71,7 +77,7 @@ meson setup build-android --cross-file "$WORKDIR/android-aarch64" \
 
 meson compile -C build-android -j$(nproc)
 
-# --- PACKAGE VULKAN ---
+# ---------- PACKAGE ----------
 PKG_V="$WORKDIR/vulkan_panfrost"
 rm -rf "$PKG_V" && mkdir -p "$PKG_V"
 cp build-android/src/panfrost/vulkan/libvulkan_panfrost.so "$PKG_V/vulkan.panfrost.so"
@@ -79,7 +85,6 @@ patchelf --set-soname vulkan.panfrost.so "$PKG_V/vulkan.panfrost.so"
 echo "{\"name\":\"PanVK\",\"version\":\"$MESA_VERSION\",\"vulkan\":{\"file\":\"vulkan.panfrost.so\",\"uuid\":\"panvk-mali\"}}" > "$PKG_V/meta.json"
 cd "$WORKDIR" && zip -qr panvk_adrenotools.zip vulkan_panfrost/
 
-# --- PACKAGE OPENGL ES ---
 PKG_G="$WORKDIR/opengl_panfrost"
 rm -rf "$PKG_G" && mkdir -p "$PKG_G"
 cp mesa/build-android/src/gallium/targets/dri/libgallium_dri.so "$PKG_G/"
@@ -90,4 +95,6 @@ cp mesa/build-android/src/gles/libGLESv2.so "$PKG_G/"
 echo "{\"name\":\"Mesa NIR\",\"version\":\"$MESA_VERSION\",\"gles\":{\"file\":\"libgallium_dri.so\"}}" > "$PKG_G/meta.json"
 zip -qr mesa_nir_adrenotools.zip opengl_panfrost/
 
-echo "Done. Packages: $WORKDIR/panvk_adrenotools.zip, $WORKDIR/mesa_nir_adrenotools.zip"
+echo "✅ Build complete. NDK cached at $NDK_PATH"
+echo "📦 Vulkan: $WORKDIR/panvk_adrenotools.zip"
+echo "📦 OpenGL ES: $WORKDIR/mesa_nir_adrenotools.zip"
