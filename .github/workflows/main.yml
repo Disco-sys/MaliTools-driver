@@ -36,15 +36,14 @@ jobs:
             flex \
             bison
 
-          # Install Meson >= 1.4.0 via pip
           pip3 install --user --upgrade 'meson>=1.4.0'
           echo "$HOME/.local/bin" >> $GITHUB_PATH
 
-      - name: Configure Mesa (swrast only)
+      - name: Configure Mesa (llvmpipe only)
         run: |
           cd mesa
           meson setup build . \
-            -Dgallium-drivers=swrast \
+            -Dgallium-drivers=llvmpipe \
             -Dvulkan-drivers= \
             -Dllvm=enabled \
             -Dbuildtype=release
