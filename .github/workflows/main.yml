@@ -1,4 +1,4 @@
-name: PanVK Mali Driver
+name: Mesa Native Build Test (Official Guide)
 on: push
 
 permissions:
@@ -7,96 +7,48 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
-    env:
-      NDK_VERSION: r29
-      API_LEVEL: 31
-      PLATFORM_SDK_VERSION: 34
     steps:
-      - name: Clone Mesa source from GitLab
+      - name: Clone Mesa source
         run: |
           git clone --depth 1 --branch main https://gitlab.freedesktop.org/mesa/mesa.git mesa
 
-      - name: Install dependencies (including LLVM)
+      - name: Install host dependencies (per official docs)
         run: |
           sudo apt-get update -y
           sudo apt-get install -y --no-install-recommends \
-            bison \
-            flex \
+            meson \
             ninja-build \
+            python3-mako \
             pkg-config \
-            python3 \
-            python3-pip \
-            wget \
-            unzip \
-            zip \
-            patchelf \
-            libxcb-*-dev \
-            libx11-xcb-dev \
-            libgl1-mesa-dev \
             libdrm-dev \
+            libx11-xcb-dev \
+            libxcb-dri3-dev \
+            libxcb-present-dev \
+            libxcb-sync-dev \
+            libxshmfence-dev \
+            libxxf86vm-dev \
+            libxrandr-dev \
+            libxfixes-dev \
+            libxdamage-dev \
+            libxext-dev \
             llvm-dev \
-            libclc-20-dev
+            libclc-20-dev \
+            flex \
+            bison
 
-          pip3 install --user meson mako packaging
-
-          # Create local dependencies directory
-          mkdir -p dependencies/NDK
-          echo "NDK installing into dependencies/NDK..."
-          cd dependencies/NDK
-          wget -q https://dl.google.com/android/repository/android-ndk-${NDK_VERSION}-linux.zip
-          unzip -q android-ndk-${NDK_VERSION}-linux.zip
-          echo "TOOLCHAIN=$PWD/android-ndk-${NDK_VERSION}/toolchains/llvm/prebuilt/linux-x86_64" >> $GITHUB_ENV
-          echo "NDK installed."
-
-      - name: Configuring and compiling Mesa
+      - name: Configure Mesa (swrast only)
         run: |
-          test -f mesa/meson.build || { echo "ERROR: mesa/meson.build missing!"; exit 1; }
           cd mesa
-
-          cat > cross-android.txt <<EOF
-          [binaries]
-          c = '${TOOLCHAIN}/bin/aarch64-linux-android${API_LEVEL}-clang'
-          cpp = '${TOOLCHAIN}/bin/aarch64-linux-android${API_LEVEL}-clang++'
-          ar = '${TOOLCHAIN}/bin/llvm-ar'
-          strip = '${TOOLCHAIN}/bin/llvm-strip'
-          pkg-config = '/usr/bin/pkg-config'
-
-          [host_machine]
-          system = 'android'
-          cpu_family = 'aarch64'
-          cpu = 'armv8-a'
-          endian = 'little'
-
-          [built-in options]
-          c_args = ['-DETIME=ETIMEDOUT', '-DANDROID']
-          cpp_args = ['-DETIME=ETIMEDOUT', '-DANDROID']
-
-          [properties]
-          needs_exe_wrapper = true
-          EOF
-
-          meson setup build-android . --cross-file cross-android.txt \
-            -Dplatforms=android \
-            -Dplatform-sdk-version=$PLATFORM_SDK_VERSION \
-            -Dvulkan-drivers=panfrost \
-            -Dgallium-drivers= \
+          meson setup build . \
+            -Dgallium-drivers=swrast \
+            -Dvulkan-drivers= \
             -Dllvm=enabled \
-            -Dandroid-stub=true \
-            -Dbuildtype=release \
-            --strip
+            -Dbuildtype=release
 
-          meson compile -C build-android src/panfrost/vulkan/libvulkan_panfrost.so
-
-      - name: Package driver
+      - name: Compile Mesa
         run: |
-          mkdir -p install
-          cp mesa/build-android/src/panfrost/vulkan/libvulkan_panfrost.so install/
-          cd install
-          zip panvk-driver.zip libvulkan_panfrost.so
+          cd mesa
+          meson compile -C build
 
-      - name: Upload artifact
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: panvk-driver
-          path: install/panvk-driver.zip
+      - name: Confirm success
+        run: echo "Mesa native build completed successfully!"
