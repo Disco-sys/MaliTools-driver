@@ -1,4 +1,4 @@
-name: Build ZINK (MESA NIR) and PanVK Drivers
+name: Build ZINK (MESA NIR) and PanVK Drivers (Mesa 26.1-dev)
 
 on:
   workflow_dispatch:
@@ -10,7 +10,9 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt update
-          sudo apt install -y python3-pip ninja-build pkg-config libelf-dev wget unzip zip
+          sudo apt install -y \
+            python3-pip ninja-build pkg-config libelf-dev wget unzip zip \
+            libzstd-dev liblz4-dev libssl-dev
           pip3 install meson mako
 
       - name: Setup NDK r28
@@ -38,8 +40,8 @@ jobs:
           needs_exe_wrapper = true
           EOF
 
-      - name: Clone Mesa (stable release)
-        run: git clone --depth 1 --branch mesa-24.1.0 https://gitlab.freedesktop.org/mesa/mesa.git
+      - name: Clone Mesa (main branch – 26.1-dev)
+        run: git clone --depth 1 https://gitlab.freedesktop.org/mesa/mesa.git
 
       - name: Build ZINK driver (MESA NIR path)
         run: |
@@ -54,13 +56,12 @@ jobs:
             -Dandroid-stub=true
           meson compile -C build-zink
           mkdir -p ../zink_pkg
-          # Find libgallium_dri.so (the Zink driver)
           find build-zink -name "libgallium_dri.so" -exec cp {} ../zink_pkg/ \;
           cd ..
           cat > zink_pkg/meta.json <<EOF
           {
             "name": "ZINK_MESA_NIR_Mali",
-            "version": "1.0",
+            "version": "26.1-dev",
             "type": "opengl",
             "env": {
               "GALLIUM_DRIVER": "zink",
@@ -89,7 +90,7 @@ jobs:
           cat > panvk_pkg/meta.json <<EOF
           {
             "name": "PanVK_Mali",
-            "version": "1.0",
+            "version": "26.1-dev",
             "type": "vulkan"
           }
           EOF
