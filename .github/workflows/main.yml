@@ -1,54 +1,16 @@
-name: Build Mesa for Mali
+- name: Build separate drivers
+  run: |
+    chmod +x build_separate_drivers.sh
+    ./build_separate_drivers.sh
 
-on: workflow_dispatch
+- name: Upload ZINK/NIR driver
+  uses: actions/upload-artifact@v4
+  with:
+    name: ZINK-NIR-Mali-Driver
+    path: zink_nir_driver.zip
 
-jobs:
-  build:
-    runs-on: ubuntu-22.04
-    steps:
-      - name: Checkout Mesa
-        run: git clone --depth 1 https://gitlab.freedesktop.org/mesa/mesa.git
-
-      - name: Install deps
-        run: |
-          sudo apt update
-          sudo apt install -y python3-pip ninja-build pkg-config libelf-dev llvm-18-dev
-          pip3 install meson mako
-
-      - name: Setup NDK
-        uses: nttld/setup-ndk@v1
-        id: ndk
-        with:
-          ndk-version: r27c
-
-      - name: Configure build
-        run: |
-          NDK=${{ steps.ndk.outputs.ndk-path }}
-          cat > cross.txt <<EOF
-          [binaries]
-          c = '$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android35-clang'
-          cpp = '$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android35-clang++'
-          ar = '$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'
-          [host_machine]
-          system = 'android'
-          cpu_family = 'aarch64'
-          cpu = 'armv8-a'
-          endian = 'little'
-          EOF
-          cd mesa
-          meson setup build \
-            --cross-file ../cross.txt \
-            -Dplatforms=android \
-            -Dgallium-drivers=panfrost \
-            -Dvulkan-drivers=panfrost \
-            -Dllvm=enabled \
-            -Dandroid-stub=true
-
-      - name: Compile
-        run: cd mesa && meson compile -C build
-
-      - name: Upload
-        uses: actions/upload-artifact@v4
-        with:
-          name: panfrost_drivers
-          path: mesa/build/src/gallium/targets/dri/libgallium_dri.so
+- name: Upload PanVK driver
+  uses: actions/upload-artifact@v4
+  with:
+    name: PanVK-Mali-Driver
+    path: panvk_driver.zip
