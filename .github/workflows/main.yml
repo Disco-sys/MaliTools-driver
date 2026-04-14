@@ -12,12 +12,12 @@ jobs:
         run: |
           git clone --depth 1 --branch main https://gitlab.freedesktop.org/mesa/mesa.git mesa
 
-      - name: Install host dependencies (per official docs)
+      - name: Install host dependencies (per official docs + pip Meson)
         run: |
           sudo apt-get update -y
           sudo apt-get install -y --no-install-recommends \
-            meson \
             ninja-build \
+            python3-pip \
             python3-mako \
             pkg-config \
             libdrm-dev \
@@ -35,6 +35,10 @@ jobs:
             libclc-20-dev \
             flex \
             bison
+
+          # Install Meson >= 1.4.0 via pip
+          pip3 install --user --upgrade 'meson>=1.4.0'
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
 
       - name: Configure Mesa (swrast only)
         run: |
