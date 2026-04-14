@@ -1,4 +1,4 @@
-name: Mali driver
+name: PanVK Mali Driver
 on: push
 
 permissions:
@@ -12,102 +12,107 @@ jobs:
       API_LEVEL: 31
       PLATFORM_SDK_VERSION: 34
     steps:
-    - name: Checkout Mesa 26.1 (main branch)
-      uses: actions/checkout@v4
-      with:
-        repository: 'mesa/mesa'
-        ref: 'main'
+      - name: Checkout Mesa source
+        uses: actions/checkout@v4
+        with:
+          repository: 'mesa/mesa'
+          ref: 'main'
 
-    - name: Install Dependencies (Ubuntu)
-      run: |
-        sudo apt-get update -y
-        sudo apt-get install -y --no-install-recommends \
-          bison \
-          flex \
-          expat \
-          gettext \
-          libx11-dev \
-          libxcb1-dev \
-          libxdamage-dev \
-          libxext-dev \
-          ninja-build \
-          pkg-config \
-          python3 \
-          python3-pip \
-          llvm-dev \
-          libclc-20-dev \
-          wget \
-          unzip \
-          zip \
-          patchelf
+      - name: Install host dependencies
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y --no-install-recommends \
+            bison \
+            flex \
+            ninja-build \
+            pkg-config \
+            python3 \
+            python3-pip \
+            llvm-dev \
+            libclc-20-dev \
+            wget \
+            unzip \
+            zip \
+            patchelf \
+            libxcb-*-dev \
+            libx11-xcb-dev \
+            libgl1-mesa-dev \
+            libdrm-dev
 
-    - name: Install Mako and meson
-      run: pip3 install --user mako meson packaging
+      - name: Install Meson and Mako
+        run: pip3 install --user meson mako packaging
 
-    - name: Download Android NDK
-      run: |
-        mkdir -p $HOME/ndk
-        cd $HOME/ndk
-        wget -q https://dl.google.com/android/repository/android-ndk-${NDK_VERSION}-linux.zip
-        unzip -q android-ndk-${NDK_VERSION}-linux.zip
-        echo "TOOLCHAIN=$HOME/ndk/android-ndk-${NDK_VERSION}/toolchains/llvm/prebuilt/linux-x86_64" >> $GITHUB_ENV
+      - name: Download Android NDK
+        run: |
+          mkdir -p $HOME/ndk
+          cd $HOME/ndk
+          wget -q https://dl.google.com/android/repository/android-ndk-${NDK_VERSION}-linux.zip
+          unzip -q android-ndk-${NDK_VERSION}-linux.zip
+          echo "TOOLCHAIN=$HOME/ndk/android-ndk-${NDK_VERSION}/toolchains/llvm/prebuilt/linux-x86_64" >> $GITHUB_ENV
 
-    - name: Configure Mesa for PanVK and Mesa NIR
-      run: |
-        cd mesa
-        cat > ../cross-android.txt <<EOF
-        [binaries]
-        c = '${TOOLCHAIN}/bin/aarch64-linux-android${API_LEVEL}-clang'
-        cpp = '${TOOLCHAIN}/bin/aarch64-linux-android${API_LEVEL}-clang++'
-        ar = '${TOOLCHAIN}/bin/llvm-ar'
-        strip = '${TOOLCHAIN}/bin/llvm-strip'
-        pkg-config = '/usr/bin/pkg-config'
+      - name: Configure Mesa for PanVK
+        run: |
+          cd mesa
+          echo "TOOLCHAIN is: ${TOOLCHAIN}"
+          echo "API_LEVEL is: ${API_LEVEL}"
+          echo "PLATFORM_SDK_VERSION is: ${PLATFORM_SDK_VERSION}"
 
-        [host_machine]
-        system = 'android'
-        cpu_family = 'aarch64'
-        cpu = 'armv8-a'
-        endian = 'little'
+          if [ ! -f "${TOOLCHAIN}/bin/aarch64-linux-android${API_LEVEL}-clang" ]; then
+            echo "ERROR: Compiler not found"
+            exit 1
+          fi
 
-        [built-in options]
-        c_args = ['-DETIME=ETIMEDOUT', '-DANDROID']
-        cpp_args = ['-DETIME=ETIMEDOUT', '-DANDROID']
+          cat > cross-android.txt <<EOF
+          [binaries]
+          c = '${TOOLCHAIN}/bin/aarch64-linux-android${API_LEVEL}-clang'
+          cpp = '${TOOLCHAIN}/bin/aarch64-linux-android${API_LEVEL}-clang++'
+          ar = '${TOOLCHAIN}/bin/llvm-ar'
+          strip = '${TOOLCHAIN}/bin/llvm-strip'
+          pkg-config = '/usr/bin/pkg-config'
 
-        [properties]
-        needs_exe_wrapper = true
-        EOF
+          [host_machine]
+          system = 'android'
+          cpu_family = 'aarch64'
+          cpu = 'armv8-a'
+          endian = 'little'
 
-        meson setup build-android --cross-file ../cross-android.txt \
-          -Dplatforms=android \
-          -Dplatform-sdk-version=$PLATFORM_SDK_VERSION \
-          -Dvulkan-drivers=panfrost \
-          -Dgallium-drivers=panfrost \
-          -Dllvm=enabled \
-          -Dandroid-stub=true \
-          -Dbuildtype=release \
-          --strip
+          [built-in options]
+          c_args = ['-DETIME=ETIMEDOUT', '-DANDROID']
+          cpp_args = ['-DETIME=ETIMEDOUT', '-DANDROID']
 
-    - name: Build PanVK and Mesa NIR
-      run: |
-        cd mesa
-        meson compile -C build-android
+          [properties]
+          needs_exe_wrapper = true
+          EOF
 
-    - name: Package drivers
-      run: |
-        mkdir -p install
-        # Vulkan
-        cp mesa/build-android/src/panfrost/vulkan/libvulkan_panfrost.so install/
-        # OpenGL ES
-        cp mesa/build-android/src/gallium/targets/dri/libgallium_dri.so install/
-        cp mesa/build-android/src/egl/libEGL.so install/
-        cp mesa/build-android/src/mapi/shared-glapi/libglapi.so install/
-        cp mesa/build-android/src/gles/libGLESv2.so install/
-        cd install
-        zip -r mali-drivers.zip *.so
+          echo "=== Generated cross-android.txt ==="
+          cat cross-android.txt
+          echo "==================================="
 
-    - name: Upload Artifact
-      if: always()
-      uses: actions/upload-artifact@v4
-      with:
-        name: mali-drivers
-        path: install/mali-drivers.zip
+          meson setup build-android --cross-file cross-android.txt \
+            -Dplatforms=android \
+            -Dplatform-sdk-version=$PLATFORM_SDK_VERSION \
+            -Dvulkan-drivers=panfrost \
+            -Dgallium-drivers= \
+            -Dllvm=enabled \
+            -Dandroid-stub=true \
+            -Dbuildtype=release \
+            --strip
+
+      - name: Build PanVK driver
+        run: |
+          cd mesa
+          meson compile -C build-android src/panfrost/vulkan/libvulkan_panfrost.so
+
+      - name: Package driver
+        run: |
+          mkdir -p install
+          cp mesa/build-android/src/panfrost/vulkan/libvulkan_panfrost.so install/
+          cd install
+          zip panvk-driver.zip libvulkan_panfrost.so
+
+      - name: Upload artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: panvk-driver
+          path: install/panvk-driver.zip
