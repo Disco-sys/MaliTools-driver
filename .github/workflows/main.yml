@@ -37,11 +37,13 @@ jobs:
 
           pip3 install --user meson mako packaging
 
+          echo "NDK installing..."
           mkdir -p $HOME/ndk
           cd $HOME/ndk
           wget -q https://dl.google.com/android/repository/android-ndk-${NDK_VERSION}-linux.zip
           unzip -q android-ndk-${NDK_VERSION}-linux.zip
           echo "TOOLCHAIN=$HOME/ndk/android-ndk-${NDK_VERSION}/toolchains/llvm/prebuilt/linux-x86_64" >> $GITHUB_ENV
+          echo "NDK installed."
 
       - name: Configuring and compiling Mesa
         run: |
@@ -76,9 +78,6 @@ jobs:
             -Dvulkan-drivers=panfrost \
             -Dgallium-drivers= \
             -Dllvm=disabled \
-            -Dopencl=disabled \
-            -Dgallium-opencl=disabled \
-            -Dmicrosoft-clc=disabled \
             -Dandroid-stub=true \
             -Dbuildtype=release \
             --strip
