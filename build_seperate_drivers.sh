@@ -9,9 +9,29 @@ MESA_BRANCH="main"
 mkdir -p "$WORKDIR"
 cd "$WORKDIR"
 
-# Install dependencies (if running on Ubuntu runner)
+# Install all possible dependencies (host-side, for tools and headers)
 sudo apt update
-sudo apt install -y python3-pip ninja-build pkg-config libelf-dev wget unzip zip libzstd-dev
+sudo apt install -y \
+    python3-pip ninja-build pkg-config libelf-dev wget unzip zip \
+    libzstd-dev liblz4-dev libssl-dev libdrm-dev \
+    libx11-dev libxext-dev libxdamage-dev libxfixes-dev libxrandr-dev \
+    libxcb-glx0-dev libxcb-shm0-dev libxcb-dri2-0-dev libxcb-dri3-dev \
+    libxcb-present-dev libxcb-sync-dev libxshmfence-dev \
+    libxxf86vm-dev libxinerama-dev libxcursor-dev \
+    libwayland-dev wayland-protocols \
+    libgl1-mesa-dev libglu1-mesa-dev \
+    mesa-utils-extra \
+    flex bison \
+    libclang-18-dev llvm-18-dev \
+    libunwind-dev \
+    libva-dev libvdpau-dev \
+    libomxil-bellagio-dev \
+    libvulkan-dev \
+    libxml2-dev \
+    libglvnd-dev \
+    libsensors-dev \
+    libpciaccess-dev
+
 pip3 install meson mako
 
 # Download NDK
