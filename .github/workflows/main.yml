@@ -1,4 +1,4 @@
-name: Build ZINK (MESA NIR) and PanVK Drivers (Mesa 26.1-dev)
+name: Build ZINK and PanVK for Mali (Stable)
 
 on:
   workflow_dispatch:
@@ -40,7 +40,7 @@ jobs:
           needs_exe_wrapper = true
           EOF
 
-      - name: Clone Mesa (main branch – 26.1-dev)
+      - name: Clone Mesa
         run: git clone --depth 1 https://gitlab.freedesktop.org/mesa/mesa.git
 
       - name: Build ZINK driver (MESA NIR path)
@@ -53,7 +53,13 @@ jobs:
             -Dvulkan-drivers= \
             -Dbuildtype=release \
             -Dllvm=disabled \
-            -Dandroid-stub=true
+            -Dandroid-stub=true \
+            -Dglx=disabled \
+            -Degl=disabled \
+            -Dshared-glapi=enabled \
+            -Dgles1=disabled \
+            -Dgles2=disabled \
+            -Dopengl=true
           meson compile -C build-zink
           mkdir -p ../zink_pkg
           find build-zink -name "libgallium_dri.so" -exec cp {} ../zink_pkg/ \;
@@ -61,7 +67,7 @@ jobs:
           cat > zink_pkg/meta.json <<EOF
           {
             "name": "ZINK_MESA_NIR_Mali",
-            "version": "26.1-dev",
+            "version": "git",
             "type": "opengl",
             "env": {
               "GALLIUM_DRIVER": "zink",
@@ -82,7 +88,10 @@ jobs:
             -Dgallium-drivers= \
             -Dbuildtype=release \
             -Dllvm=disabled \
-            -Dandroid-stub=true
+            -Dandroid-stub=true \
+            -Dglx=disabled \
+            -Degl=disabled \
+            -Dshared-glapi=enabled
           meson compile -C build-panvk
           mkdir -p ../panvk_pkg
           cp build-panvk/src/panfrost/vulkan/libvulkan_panfrost.so ../panvk_pkg/
@@ -90,13 +99,13 @@ jobs:
           cat > panvk_pkg/meta.json <<EOF
           {
             "name": "PanVK_Mali",
-            "version": "26.1-dev",
+            "version": "git",
             "type": "vulkan"
           }
           EOF
           cd panvk_pkg && zip -r ../panvk_driver.zip . && cd ..
 
-      - name: Upload ZINK (MESA NIR) driver
+      - name: Upload ZINK driver
         uses: actions/upload-artifact@v4
         with:
           name: ZINK-MESA-NIR-Mali-Driver
