@@ -8,6 +8,10 @@ on:
 jobs:
   build:
     runs-on: ubuntu-24.04
+    env:
+      NDK_VERSION: r26d          # LTS for Android 12
+      API_LEVEL: 31              # Android 12
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -20,13 +24,15 @@ jobs:
           restore-keys: |
             pip-${{ runner.os }}-
 
-      - name: Install host dependencies
+      - name: Install and upgrade host dependencies (including LLVM)
         run: |
           sudo apt-get update -y
+          sudo apt-get upgrade -y --no-install-recommends
           sudo apt-get install -y --no-install-recommends \
             wget unzip zip ninja-build meson python3-pip python3-mako patchelf \
             pkg-config cmake libxcb-*-dev libgl1-mesa-dev libegl1-mesa-dev \
-            libdrm-dev glslang-tools
+            libdrm-dev glslang-tools llvm-dev
+          pip3 install --user --upgrade pip
           pip3 install --user --upgrade meson mako
           echo "$HOME/.local/bin" >> $GITHUB_PATH
 
@@ -35,23 +41,23 @@ jobs:
         uses: actions/cache@v4
         with:
           path: Dependencies/NDK
-          key: ndk-r28-${{ runner.os }}
+          key: ndk-${{ env.NDK_VERSION }}-api${{ env.API_LEVEL }}-${{ runner.os }}
 
       - name: Download Android NDK (if not cached)
         if: steps.cache-ndk.outputs.cache-hit != 'true'
         run: |
           mkdir -p Dependencies/NDK
           cd Dependencies/NDK
-          wget --progress=bar:force https://dl.google.com/android/repository/android-ndk-r28-linux.zip
-          unzip -q android-ndk-r28-linux.zip
-          rm android-ndk-r28-linux.zip
+          wget --progress=bar:force https://dl.google.com/android/repository/android-ndk-${{ env.NDK_VERSION }}-linux.zip
+          unzip -q android-ndk-${{ env.NDK_VERSION }}-linux.zip
+          rm android-ndk-${{ env.NDK_VERSION }}-linux.zip
 
       - name: Setup NDK path
         run: |
-          echo "NDK_PATH=$PWD/Dependencies/NDK/android-ndk-r28" >> $GITHUB_ENV
-          echo "TOOLCHAIN=$PWD/Dependencies/NDK/android-ndk-r28/toolchains/llvm/prebuilt/linux-x86_64" >> $GITHUB_ENV
+          echo "NDK_PATH=$PWD/Dependencies/NDK/android-ndk-${{ env.NDK_VERSION }}" >> $GITHUB_ENV
+          echo "TOOLCHAIN=$PWD/Dependencies/NDK/android-ndk-${{ env.NDK_VERSION }}/toolchains/llvm/prebuilt/linux-x86_64" >> $GITHUB_ENV
 
-      - name: Clone or update Mesa
+      - name: Clone or update Mesa (latest main)
         run: |
           mkdir -p mali_build
           cd mali_build
@@ -69,8 +75,8 @@ jobs:
           mkdir -p mali_build
           cat > mali_build/cross.txt <<EOF
           [binaries]
-          c = '${{ env.TOOLCHAIN }}/bin/aarch64-linux-android28-clang'
-          cpp = '${{ env.TOOLCHAIN }}/bin/aarch64-linux-android28-clang++'
+          c = '${{ env.TOOLCHAIN }}/bin/aarch64-linux-android${{ env.API_LEVEL }}-clang'
+          cpp = '${{ env.TOOLCHAIN }}/bin/aarch64-linux-android${{ env.API_LEVEL }}-clang++'
           ar = '${{ env.TOOLCHAIN }}/bin/llvm-ar'
           strip = '${{ env.TOOLCHAIN }}/bin/llvm-strip'
           pkg-config = '/usr/bin/pkg-config'
@@ -98,8 +104,7 @@ jobs:
             -Dvulkan-layers= \
             -Dandroid-stub=true \
             -Dbuildtype=release \
-            -Dllvm=disabled \
-            -Dmicrosoft-clc=disabled \
+            -Dllvm=enabled \
             -Dopengl=true \
             -Dgbm=disabled \
             -Dglx=disabled \
