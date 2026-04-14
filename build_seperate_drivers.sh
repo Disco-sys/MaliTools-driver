@@ -1,54 +1,73 @@
 #!/bin/bash
 
 # ----------------------------------------------------------------------
-# Adapted from K11MCH1's Turnip build script
-# Modified for Mali PanVK + Panfrost NIR (Mesa main / 26.1-devel)
-# Fixes: vulkan-layers=disabled error + deprecation warnings
+# Mali Driver Build Script with Local Dependency Caching
+# Dependencies are stored in: ./Dependencies/
+# NDK is stored in: ./Dependencies/NDK/
 # ----------------------------------------------------------------------
 
 set -e
 
+# ---------- CONFIGURATION ----------
 WORKDIR="$PWD/mali_build"
+REPO_ROOT="$PWD"                      # Assumes script runs from repo root
+DEPS_DIR="$REPO_ROOT/Dependencies"
+NDK_DIR="$DEPS_DIR/NDK"
 NDK_VERSION="r28"
 API_LEVEL="28"
 MESA_REPO="https://gitlab.freedesktop.org/mesa/mesa.git"
 MESA_BRANCH="main"
 
-# ---------- CREATE WORKSPACE ----------
+# ---------- CREATE DIRECTORIES ----------
 mkdir -p "$WORKDIR"
-cd "$WORKDIR"
+mkdir -p "$NDK_DIR"
 
-# ---------- INSTALL DEPENDENCIES ----------
+# ---------- INSTALL SYSTEM DEPENDENCIES (only if missing) ----------
+echo "==> Checking/installing system packages..."
 sudo apt-get update
-sudo apt-get install -y wget unzip zip ninja-build meson python3-pip \
-    python3-mako libxcb-keysyms1-dev libxcb-randr0-dev libx11-xcb-dev \
+sudo apt-get install -y --no-install-recommends \
+    wget unzip zip ninja-build meson python3-pip \
+    python3-mako patchelf pkg-config cmake \
+    libxcb-keysyms1-dev libxcb-randr0-dev libx11-xcb-dev \
     libxcb-present-dev libxcb-dri3-dev libxcb-sync-dev libxshmfence-dev \
     libxxf86vm-dev libxrandr-dev libxfixes-dev libxdamage-dev libxext-dev \
-    libgl1-mesa-dev libegl1-mesa-dev libdrm-dev pkg-config cmake \
-    patchelf
+    libgl1-mesa-dev libegl1-mesa-dev libdrm-dev
 
+# Ensure latest Meson (user install, not system)
 pip3 install --user --upgrade meson
 export PATH="$HOME/.local/bin:$PATH"
 
-# ---------- DOWNLOAD NDK ----------
-if [ ! -d "android-ndk-${NDK_VERSION}" ]; then
-    echo "==> Downloading NDK ${NDK_VERSION}..."
+# ---------- ANDROID NDK (cached locally) ----------
+NDK_PATH="$NDK_DIR/android-ndk-$NDK_VERSION"
+if [ ! -d "$NDK_PATH" ]; then
+    echo "==> NDK not found in $NDK_PATH. Downloading..."
+    cd "$NDK_DIR"
     wget -q "https://dl.google.com/android/repository/android-ndk-${NDK_VERSION}-linux.zip"
     unzip -q "android-ndk-${NDK_VERSION}-linux.zip"
+    rm "android-ndk-${NDK_VERSION}-linux.zip"
+    echo "==> NDK installed to $NDK_PATH"
+else
+    echo "==> Using cached NDK at $NDK_PATH"
 fi
-NDK="$PWD/android-ndk-${NDK_VERSION}"
-TOOLCHAIN="$NDK/toolchains/llvm/prebuilt/linux-x86_64"
+TOOLCHAIN="$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64"
 
-# ---------- CLONE MESA ----------
+# ---------- CLONE OR UPDATE MESA ----------
+cd "$WORKDIR"
 if [ ! -d "mesa" ]; then
-    echo "==> Cloning Mesa..."
+    echo "==> Cloning Mesa (shallow)..."
     git clone --depth 1 --branch "$MESA_BRANCH" "$MESA_REPO"
+else
+    echo "==> Mesa already cloned. Fetching latest..."
+    cd mesa
+    git fetch --depth 1 origin "$MESA_BRANCH"
+    git reset --hard FETCH_HEAD
+    cd ..
 fi
 cd mesa
 MESA_VERSION=$(cat VERSION)
 echo "==> Mesa version: $MESA_VERSION"
 
-# ---------- CREATE CROSS FILE (fixed deprecations) ----------
+# ---------- CREATE CROSS FILE (cached in WORKDIR) ----------
 cat > "$WORKDIR/android-aarch64" <<EOF
 [binaries]
 c = '$TOOLCHAIN/bin/aarch64-linux-android${API_LEVEL}-clang'
@@ -74,7 +93,7 @@ EOF
 export CFLAGS="-DETIME=ETIMEDOUT"
 export CXXFLAGS="-DETIME=ETIMEDOUT"
 
-# ---------- MESON CONFIGURE (fixed vulkan-layers) ----------
+# ---------- MESON CONFIGURE ----------
 echo "==> Configuring Mesa for PanVK + Panfrost NIR..."
 meson setup build-android \
     --cross-file "$WORKDIR/android-aarch64" \
@@ -130,7 +149,7 @@ EOF
 cd "$WORKDIR"
 zip -r panvk_adrenotools.zip vulkan_panfrost/
 
-# ---------- PACKAGE OPENGL ES (MESA NIR) ----------
+# ---------- PACKAGE OPENGL ES ----------
 echo "==> Packaging OpenGL ES driver (Mesa NIR/Panfrost)..."
 PKG_GLES="$WORKDIR/opengl_panfrost"
 rm -rf "$PKG_GLES"
@@ -163,4 +182,5 @@ echo "Build complete!"
 echo "Vulkan package   : $WORKDIR/panvk_adrenotools.zip"
 echo "OpenGL ES package: $WORKDIR/mesa_nir_adrenotools.zip"
 echo "Mesa version     : $MESA_VERSION"
+echo "Dependencies cached at: $DEPS_DIR"
 echo "============================================================"
