@@ -1,4 +1,4 @@
-name: Build ZINK and PanVK for Mali
+name: Build ZINK (MESA NIR) and PanVK for Mali
 
 on:
   workflow_dispatch:
@@ -10,9 +10,7 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt update
-          sudo apt install -y \
-            python3-pip ninja-build pkg-config libelf-dev wget unzip zip \
-            libzstd-dev liblz4-dev libssl-dev
+          sudo apt install -y python3-pip ninja-build pkg-config libelf-dev wget unzip zip libzstd-dev
           pip3 install meson mako
 
       - name: Setup NDK r28
@@ -43,7 +41,7 @@ jobs:
       - name: Clone Mesa (main branch)
         run: git clone --depth 1 https://gitlab.freedesktop.org/mesa/mesa.git
 
-      - name: Build ZINK driver (MESA NIR path)
+      - name: Build ZINK driver
         run: |
           cd mesa
           meson setup build-zink \
@@ -53,15 +51,7 @@ jobs:
             -Dvulkan-drivers= \
             -Dbuildtype=release \
             -Dllvm=disabled \
-            -Dandroid-stub=true \
-            -Dglx=disabled \
-            -Degl=disabled \
-            -Dshared-glapi=enabled \
-            -Dgles1=disabled \
-            -Dgles2=disabled \
-            -Dopengl=true \
-            -Dgallium-kmsro=disabled \
-            -Dlibdrm=disabled
+            -Dandroid-stub=true
           meson compile -C build-zink
           mkdir -p ../zink_pkg
           find build-zink -name "libgallium_dri.so" -exec cp {} ../zink_pkg/ \;
@@ -90,11 +80,7 @@ jobs:
             -Dgallium-drivers= \
             -Dbuildtype=release \
             -Dllvm=disabled \
-            -Dandroid-stub=true \
-            -Dglx=disabled \
-            -Degl=disabled \
-            -Dshared-glapi=enabled \
-            -Dlibdrm=disabled
+            -Dandroid-stub=true
           meson compile -C build-panvk
           mkdir -p ../panvk_pkg
           cp build-panvk/src/panfrost/vulkan/libvulkan_panfrost.so ../panvk_pkg/
