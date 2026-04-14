@@ -23,7 +23,7 @@ jobs:
           sudo apt-get install -y --no-install-recommends \
             wget unzip zip ninja-build meson python3-pip python3-mako patchelf \
             pkg-config cmake libxcb-*-dev libgl1-mesa-dev libegl1-mesa-dev \
-            libdrm-dev glslang-tools flex bison
+            libdrm-dev glslang-tools llvm-dev flex bison
           pip3 install --user --upgrade meson mako packaging
           echo "$HOME/.local/bin" >> $GITHUB_PATH
           mkdir -p Dependencies/NDK
@@ -67,7 +67,7 @@ jobs:
             -Dplatform-sdk-version=${{ env.PLATFORM_SDK_VERSION }} \
             -Dvulkan-drivers=panfrost \
             -Dgallium-drivers= \
-            -Dllvm=disabled \
+            -Dllvm=enabled \
             -Dandroid-stub=true \
             -Dbuildtype=release \
             --strip
