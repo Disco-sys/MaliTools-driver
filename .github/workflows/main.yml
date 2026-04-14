@@ -16,7 +16,7 @@ jobs:
         run: |
           git clone --depth 1 --branch main https://gitlab.freedesktop.org/mesa/mesa.git mesa
 
-      - name: Install dependencies
+      - name: Install dependencies (including LLVM)
         run: |
           sudo apt-get update -y
           sudo apt-get install -y --no-install-recommends \
@@ -33,16 +33,19 @@ jobs:
             libxcb-*-dev \
             libx11-xcb-dev \
             libgl1-mesa-dev \
-            libdrm-dev
+            libdrm-dev \
+            llvm-dev \
+            libclc-20-dev
 
           pip3 install --user meson mako packaging
 
-          echo "NDK installing..."
-          mkdir -p $HOME/ndk
-          cd $HOME/ndk
+          # Create local dependencies directory
+          mkdir -p dependencies/NDK
+          echo "NDK installing into dependencies/NDK..."
+          cd dependencies/NDK
           wget -q https://dl.google.com/android/repository/android-ndk-${NDK_VERSION}-linux.zip
           unzip -q android-ndk-${NDK_VERSION}-linux.zip
-          echo "TOOLCHAIN=$HOME/ndk/android-ndk-${NDK_VERSION}/toolchains/llvm/prebuilt/linux-x86_64" >> $GITHUB_ENV
+          echo "TOOLCHAIN=$PWD/android-ndk-${NDK_VERSION}/toolchains/llvm/prebuilt/linux-x86_64" >> $GITHUB_ENV
           echo "NDK installed."
 
       - name: Configuring and compiling Mesa
@@ -77,7 +80,7 @@ jobs:
             -Dplatform-sdk-version=$PLATFORM_SDK_VERSION \
             -Dvulkan-drivers=panfrost \
             -Dgallium-drivers= \
-            -Dllvm=disabled \
+            -Dllvm=enabled \
             -Dandroid-stub=true \
             -Dbuildtype=release \
             --strip
