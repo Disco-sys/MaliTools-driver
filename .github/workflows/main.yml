@@ -1,4 +1,4 @@
-name: Build Mali Drivers (Official Mesa Guide)
+name: Build Driver
 
 on:
   push:
@@ -16,21 +16,28 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # ----- Install host dependencies as per Mesa docs -----
-      - name: Install host dependencies (official guide)
+      - name: Cache APT packages
+        uses: actions/cache@v4
+        with:
+          path: /var/cache/apt/archives
+          key: apt-${{ runner.os }}-${{ hashFiles('.github/workflows/build.yml') }}
+
+      - name: Install host dependencies
         run: |
           sudo apt-get update -y
           sudo apt-get install -y --no-install-recommends \
-            meson ninja-build python3-mako cmake pkg-config \
-            wget unzip zip patchelf \
-            libxcb-*-dev libx11-xcb-dev libxcb-dri3-dev libxcb-present-dev \
-            libxcb-sync-dev libxshmfence-dev libxxf86vm-dev libxrandr-dev \
-            libxfixes-dev libxdamage-dev libxext-dev libgl1-mesa-dev \
-            libegl1-mesa-dev libdrm-dev glslang-tools
-          pip3 install --user --upgrade meson
+            wget unzip zip ninja-build meson python3-pip python3-mako patchelf \
+            pkg-config cmake libxcb-*-dev libgl1-mesa-dev libegl1-mesa-dev \
+            libdrm-dev glslang-tools
+          pip3 install --user --upgrade pip meson mako
           echo "$HOME/.local/bin" >> $GITHUB_PATH
 
-      # ----- Cache NDK as per official cross-compile instructions -----
+      - name: Cache pip packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: pip-${{ runner.os }}-${{ hashFiles('**/requirements.txt') }}
+
       - name: Cache Android NDK
         id: cache-ndk
         uses: actions/cache@v4
@@ -38,7 +45,7 @@ jobs:
           path: Dependencies/NDK
           key: ndk-${{ env.NDK_VERSION }}-api${{ env.API_LEVEL }}
 
-      - name: Download Android NDK (if not cached)
+      - name: Download Android NDK
         if: steps.cache-ndk.outputs.cache-hit != 'true'
         run: |
           mkdir -p Dependencies/NDK
@@ -47,12 +54,11 @@ jobs:
           unzip -q android-ndk-${{ env.NDK_VERSION }}-linux.zip
           rm android-ndk-${{ env.NDK_VERSION }}-linux.zip
 
-      - name: Setup NDK path
+      - name: Setup NDK toolchain path
         run: |
           echo "TOOLCHAIN=$PWD/Dependencies/NDK/android-ndk-${{ env.NDK_VERSION }}/toolchains/llvm/prebuilt/linux-x86_64" >> $GITHUB_ENV
 
-      # ----- Mesa source (shallow clone as per official) -----
-      - name: Clone Mesa
+      - name: Clone Mesa source
         run: |
           mkdir -p mali_build
           cd mali_build
@@ -64,8 +70,7 @@ jobs:
             git reset --hard FETCH_HEAD
           fi
 
-      # ----- Cross file exactly as described in docs -----
-      - name: Create cross file
+      - name: Generate cross compile file
         run: |
           mkdir -p mali_build
           cat > mali_build/cross.txt <<EOF
@@ -90,8 +95,7 @@ jobs:
           needs_exe_wrapper = true
           EOF
 
-      # ----- Configure exactly per official docs for Panfrost -----
-      - name: Configure Mesa (PanVK + Panfrost)
+      - name: Configure Mesa
         run: |
           cd mali_build/mesa
           export CFLAGS="-DETIME=ETIMEDOUT"
@@ -100,8 +104,10 @@ jobs:
             -Dplatforms=android \
             -Dvulkan-drivers=panfrost \
             -Dgallium-drivers=panfrost \
+            -Dvulkan-layers= \
+            -Dandroid-stub=true \
+            -Dbuildtype=release \
             -Dllvm=disabled \
-            -Dclc=disabled \
             -Dopengl=true \
             -Dgbm=disabled \
             -Dglx=disabled \
@@ -109,18 +115,17 @@ jobs:
             -Dgles1=disabled \
             -Dgles2=enabled \
             -Dshared-glapi=enabled \
-            -Dandroid-stub=true \
-            -Dbuildtype=release \
+            -Dbuild-tests=false \
+            -Dzstd=enabled \
+            -Dvulkan-beta=false \
             --strip
 
-      # ----- Compile as per official -----
       - name: Compile Mesa
         run: |
           cd mali_build/mesa
-          ninja -C build-android -j$(nproc)
+          meson compile -C build-android -j$(nproc)
 
-      # ----- Packaging (unchanged) -----
-      - name: Package PanVK
+      - name: Package Vulkan driver
         run: |
           cd mali_build
           MESA_VERSION=$(cat mesa/VERSION)
@@ -130,7 +135,7 @@ jobs:
           echo "{\"name\":\"PanVK\",\"version\":\"$MESA_VERSION\",\"vulkan\":{\"file\":\"vulkan.panfrost.so\",\"uuid\":\"panvk-mali\"}}" > vulkan_panfrost/meta.json
           zip -qr panvk_adrenotools.zip vulkan_panfrost
 
-      - name: Package Mesa NIR
+      - name: Package OpenGL ES driver
         run: |
           cd mali_build
           MESA_VERSION=$(cat mesa/VERSION)
