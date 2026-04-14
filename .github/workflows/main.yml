@@ -12,12 +12,9 @@ jobs:
       API_LEVEL: 31
       PLATFORM_SDK_VERSION: 34
     steps:
-      - name: Checkout Mesa source
-        uses: actions/checkout@v4
-        with:
-          repository: 'mesa/mesa'
-          ref: 'main'
-          path: 'mesa'               # <-- This ensures the source goes into ./mesa
+      - name: Clone Mesa source from GitLab
+        run: |
+          git clone --depth 1 --branch main https://gitlab.freedesktop.org/mesa/mesa.git mesa
 
       - name: Install host dependencies
         run: |
@@ -53,14 +50,11 @@ jobs:
 
       - name: Configure Mesa for PanVK
         run: |
-          cd mesa
-          echo "Current directory: $(pwd)"
-          ls -la meson.build || { echo "ERROR: meson.build not found!"; exit 1; }
+          # Confirm Mesa source was cloned
+          test -f mesa/meson.build || { echo "ERROR: mesa/meson.build missing!"; exit 1; }
 
-          if [ ! -f "${TOOLCHAIN}/bin/aarch64-linux-android${API_LEVEL}-clang" ]; then
-            echo "ERROR: Compiler not found"
-            exit 1
-          fi
+          cd mesa
+          echo "Configuring in: $(pwd)"
 
           cat > cross-android.txt <<EOF
           [binaries]
