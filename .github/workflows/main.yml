@@ -28,7 +28,7 @@ jobs:
           sudo apt-get install -y --no-install-recommends \
             wget unzip zip ninja-build meson python3-pip python3-mako patchelf \
             pkg-config cmake libxcb-*-dev libgl1-mesa-dev libegl1-mesa-dev \
-            libdrm-dev glslang-tools
+            libdrm-dev glslang-tools llvm-dev
           pip3 install --user --upgrade pip meson mako
           echo "$HOME/.local/bin" >> $GITHUB_PATH
 
@@ -107,7 +107,7 @@ jobs:
             -Dvulkan-layers= \
             -Dandroid-stub=true \
             -Dbuildtype=release \
-            -Dllvm=disabled \
+            -Dllvm=enabled \
             -Dopengl=true \
             -Dgbm=disabled \
             -Dglx=disabled \
