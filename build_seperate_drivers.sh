@@ -9,7 +9,7 @@ MESA_BRANCH="main"
 mkdir -p "$WORKDIR"
 cd "$WORKDIR"
 
-# Install host dependencies (Ubuntu 26.04)
+# Install host dependencies
 sudo apt update
 sudo apt install -y \
     python3-pip ninja-build pkg-config libelf-dev wget unzip zip \
@@ -30,7 +30,7 @@ sudo apt install -y \
     libsensors-dev \
     libpciaccess-dev
 
-# Upgrade pip and install meson (latest)
+# Upgrade pip and install meson
 pip3 install --upgrade pip
 pip3 install meson mako
 
@@ -63,6 +63,11 @@ endian = 'little'
 needs_exe_wrapper = true
 EOF
 
+# Set environment to help find host headers
+export CFLAGS="-I/usr/include"
+export CXXFLAGS="-I/usr/include"
+export PKG_CONFIG_PATH="/usr/lib/x86_64-linux-gnu/pkgconfig"
+
 # Build ZINK driver (MESA NIR path)
 meson setup build-zink \
     --cross-file "$WORKDIR/cross.txt" \
@@ -73,7 +78,8 @@ meson setup build-zink \
     -Dllvm=disabled \
     -Dandroid-stub=true \
     -Dglx=disabled \
-    -Dshared-glapi=enabled
+    -Dshared-glapi=enabled \
+    -Dzstd=enabled
 
 meson compile -C build-zink
 
@@ -104,7 +110,8 @@ meson setup build-panvk \
     -Dllvm=disabled \
     -Dandroid-stub=true \
     -Dglx=disabled \
-    -Dshared-glapi=enabled
+    -Dshared-glapi=enabled \
+    -Dzstd=enabled
 
 meson compile -C build-panvk
 
