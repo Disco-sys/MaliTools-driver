@@ -52,15 +52,21 @@ jobs:
           meson setup build-zink \
             --cross-file ../android-cross.txt \
             -Dplatforms=android \
-            -Dvulkan-drivers= \
             -Dgallium-drivers=zink,panfrost \
+            -Dvulkan-drivers= \
             -Dbuildtype=release \
             -Dllvm=disabled \
-            -Dandroid-stub=true \
-            -Dzink-descriptors=lazy
+            -Dandroid-stub=true
           meson compile -C build-zink
           mkdir -p ../zink_nir_package
-          cp build-zink/src/gallium/targets/dri/libgallium_dri.so ../zink_nir_package/
+          # Find and copy the DRI driver
+          DRIVER_PATH=$(find build-zink -name "libgallium_dri.so" | head -n 1)
+          if [ -n "$DRIVER_PATH" ]; then
+            cp "$DRIVER_PATH" ../zink_nir_package/
+          else
+            echo "ERROR: libgallium_dri.so not found"
+            exit 1
+          fi
           cd ..
           cat > zink_nir_package/meta.json <<EOF
           {
