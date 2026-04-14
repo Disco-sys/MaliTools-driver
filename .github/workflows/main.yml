@@ -16,8 +16,18 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y \
           libclc-18 libclc-18-dev libelf-dev pkg-config llvm-18-dev \
-          glslang-tools ninja-build flex bison python3-mako
+          glslang-tools ninja-build flex bison python3-mako patchelf
         
+    - name: Setup Rust & Bindgen
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        targets: aarch64-linux-android
+    
+    - name: Install Bindgen CLI
+      run: |
+        cargo install bindgen-cli
+        echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+
     - name: Setup Android NDK r27b
       uses: nttld/setup-ndk@v1
       id: setup_ndk
@@ -26,11 +36,10 @@ jobs:
 
     - name: Generate Stubs and Cross File
       run: |
-        # Re-creating the installed directory structure explicitly
         mkdir -p ${{ github.workspace }}/installed/pkgconfig
         
-        # Generating stubs for all required dependencies
-        for pkg in libdrm libudev LLVMSPIRVLib libzstd libclc; do
+        # Stubs for secondary dependencies
+        for pkg in libdrm libudev libzstd libclc; do
           cat <<EOF > ${{ github.workspace }}/installed/pkgconfig/$pkg.pc
         Name: $pkg
         Description: Android Stub for $pkg
@@ -40,7 +49,16 @@ jobs:
         EOF
         done
 
-        # Creating the Cross File
+        # Version-specific stub for LLVMSPIRVLib (< 18.2)
+        cat <<EOF > ${{ github.workspace }}/installed/pkgconfig/LLVMSPIRVLib.pc
+        Name: LLVMSPIRVLib
+        Description: Android Stub for LLVMSPIRVLib
+        Version: 18.1.0
+        Cflags: -I/usr/include
+        Libs: -L${{ github.workspace }}/installed
+        EOF
+
+        # Creating the Cross File with Rust support
         NDK_PATH="${{ steps.setup_ndk.outputs.ndk-path }}"
         TOOLCHAIN="$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64"
         SYSROOT="$TOOLCHAIN/sysroot"
@@ -49,6 +67,7 @@ jobs:
         [binaries]
         c = '$TOOLCHAIN/bin/aarch64-linux-android35-clang'
         cpp = '$TOOLCHAIN/bin/aarch64-linux-android35-clang++'
+        rust = ['rustc', '--target', 'aarch64-linux-android']
         ar = '$TOOLCHAIN/bin/llvm-ar'
         strip = '$TOOLCHAIN/bin/llvm-strip'
         pkg-config = '/usr/bin/pkg-config'
@@ -65,13 +84,12 @@ jobs:
         pkg_config_libdir = ['${{ github.workspace }}/installed/pkgconfig', '$SYSROOT/usr/lib/aarch64-linux-android/pkgconfig']
         EOF
 
-    - name: Compile MESA Driver (Mali-G52 Optimized)
+    - name: Compile MESA Driver (Mali-G52 + Rust Optimized)
       run: |
         python -m venv venv
         source venv/bin/activate
         pip install "meson>=1.4.0" "mako>=1.2.0" "packaging==23.2" PyYAML
         
-        # Explicitly pointing to our fresh installed/pkgconfig dir
         export PKG_CONFIG_PATH="${{ github.workspace }}/installed/pkgconfig"
         
         cd mesa-src
@@ -86,6 +104,7 @@ jobs:
           -Db_lto=false \
           -Dllvm=enabled \
           -Dandroid-stub=true \
+          -Dpanfrost-rust=enabled \
           -Dopengl=true \
           -Dgles1=enabled \
           -Dgles2=enabled \
@@ -96,7 +115,7 @@ jobs:
     - name: Upload Driver Artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: MESA-Driver-Mali-G52-26.1-dev
+        name: MESA-Driver-Mali-G52-26.1-dev-Rust
         path: |
           mesa-src/build-android/src/gallium/targets/dri/libgallium_dri.so
           mesa-src/build-android/src/panfrost/vulkan/libvulkan_panfrost.so
