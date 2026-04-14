@@ -9,23 +9,19 @@ MESA_BRANCH="main"
 mkdir -p "$WORKDIR"
 cd "$WORKDIR"
 
-# 1. Install dependencies
 sudo apt update
 sudo apt install -y python3-pip ninja-build pkg-config libelf-dev wget unzip zip
 pip3 install meson mako
 
-# 2. Download and set up the NDK (r27c is known to work)
 wget -q "https://dl.google.com/android/repository/android-ndk-${NDK_VERSION}-linux.zip"
 unzip -q "android-ndk-${NDK_VERSION}-linux.zip"
 NDK="$PWD/android-ndk-${NDK_VERSION}"
 TOOLCHAIN="$NDK/toolchains/llvm/prebuilt/linux-x86_64"
 export PATH=$TOOLCHAIN/bin:$PATH
 
-# 3. Clone Mesa (the same source the community uses)
 git clone --depth 1 --branch "$MESA_BRANCH" "$MESA_REPO"
 cd mesa
 
-# 4. Create the cross-compilation file (based on the official docs)
 cat > "$WORKDIR/android-aarch64.txt" <<EOF
 [constants]
 ndk_path = '$NDK'
@@ -46,7 +42,6 @@ cpu = 'armv8'
 endian = 'little'
 EOF
 
-# 5. Configure the build with the correct, documented options
 meson setup build-android \
   --cross-file "$WORKDIR/android-aarch64.txt" \
   -Dplatforms=android \
@@ -56,16 +51,15 @@ meson setup build-android \
   -Dgallium-drivers= \
   -Dvulkan-drivers=panfrost \
   -Dbuildtype=release \
-  -Dllvm=disabled
+  -Dllvm=disabled \
+  -Dgallium-opencl=disabled \
+  -Dopencl=disabled
 
-# 6. Build the driver
 meson compile -C build-android
 
-# 7. Package the resulting library
 mkdir -p "$WORKDIR/panvk_pkg"
 cp build-android/src/panfrost/vulkan/libvulkan_panfrost.so "$WORKDIR/panvk_pkg/"
 
-# 8. Create a meta.json file for Winlator (based on your existing package)
 cat > "$WORKDIR/panvk_pkg/meta.json" <<EOF
 {
   "name": "PanVK_Mali",
@@ -74,7 +68,6 @@ cat > "$WORKDIR/panvk_pkg/meta.json" <<EOF
 }
 EOF
 
-# 9. Zip it up
 cd "$WORKDIR"
 zip -r panvk_driver.zip panvk_pkg/
 
