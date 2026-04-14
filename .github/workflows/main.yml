@@ -33,12 +33,15 @@ jobs:
           rm android-ndk-${{ env.NDK_VERSION }}-linux.zip
           echo "TOOLCHAIN=$PWD/android-ndk-${{ env.NDK_VERSION }}/toolchains/llvm/prebuilt/linux-x86_64" >> $GITHUB_ENV
 
-      - name: Build PanVK
+      - name: Clone Mesa
         run: |
           mkdir -p mali_build
           cd mali_build
           git clone --depth 1 --branch main https://gitlab.freedesktop.org/mesa/mesa.git
-          cd mesa
+
+      - name: Configure and build PanVK only
+        run: |
+          cd mali_build/mesa
           cat > ../cross.txt <<EOF
           [binaries]
           c = '${{ env.TOOLCHAIN }}/bin/aarch64-linux-android${{ env.API_LEVEL }}-clang'
@@ -71,9 +74,9 @@ jobs:
             -Dandroid-stub=true \
             -Dbuildtype=release \
             --strip
-          meson compile -C build-android -j$(nproc)
+          meson compile -C build-android src/panfrost/vulkan/libvulkan_panfrost.so
 
-      - name: Package
+      - name: Package driver
         run: |
           cd mali_build
           MESA_VERSION=$(cat mesa/VERSION)
@@ -83,7 +86,7 @@ jobs:
           echo "{\"name\":\"PanVK\",\"version\":\"$MESA_VERSION\",\"vulkan\":{\"file\":\"vulkan.panfrost.so\",\"uuid\":\"panvk-mali\"}}" > vulkan_panfrost/meta.json
           zip -qr panvk_adrenotools.zip vulkan_panfrost
 
-      - name: Upload
+      - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: panvk-driver
