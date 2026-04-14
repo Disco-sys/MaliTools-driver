@@ -9,7 +9,7 @@ MESA_BRANCH="main"
 mkdir -p "$WORKDIR"
 cd "$WORKDIR"
 
-# Install host dependencies
+# Install dependencies
 sudo apt update
 sudo apt install -y \
     python3-pip ninja-build pkg-config libelf-dev wget unzip zip \
@@ -30,11 +30,10 @@ sudo apt install -y \
     libsensors-dev \
     libpciaccess-dev
 
-# Upgrade pip and install meson
 pip3 install --upgrade pip
 pip3 install meson mako
 
-# Download NDK r25c
+# Download NDK
 wget -q "https://dl.google.com/android/repository/android-ndk-${NDK_VERSION}-linux.zip"
 unzip -q "android-ndk-${NDK_VERSION}-linux.zip"
 NDK="$PWD/android-ndk-${NDK_VERSION}"
@@ -63,12 +62,11 @@ endian = 'little'
 needs_exe_wrapper = true
 EOF
 
-# Set environment to help find host headers
 export CFLAGS="-I/usr/include"
 export CXXFLAGS="-I/usr/include"
 export PKG_CONFIG_PATH="/usr/lib/x86_64-linux-gnu/pkgconfig"
 
-# Build ZINK driver (MESA NIR path)
+# Build ZINK driver
 meson setup build-zink \
     --cross-file "$WORKDIR/cross.txt" \
     -Dplatforms=android \
@@ -79,7 +77,8 @@ meson setup build-zink \
     -Dandroid-stub=true \
     -Dglx=disabled \
     -Dshared-glapi=enabled \
-    -Dzstd=enabled
+    -Dzstd=enabled \
+    -Dc_args="-DETIME=ETIMEDOUT"
 
 meson compile -C build-zink
 
@@ -111,7 +110,8 @@ meson setup build-panvk \
     -Dandroid-stub=true \
     -Dglx=disabled \
     -Dshared-glapi=enabled \
-    -Dzstd=enabled
+    -Dzstd=enabled \
+    -Dc_args="-DETIME=ETIMEDOUT"
 
 meson compile -C build-panvk
 
@@ -126,7 +126,6 @@ cat > "$WORKDIR/panvk_pkg/meta.json" <<EOF
 }
 EOF
 
-# Package
 cd "$WORKDIR"
 zip -r zink_mesa_nir_driver.zip zink_pkg/
 zip -r panvk_driver.zip panvk_pkg/
