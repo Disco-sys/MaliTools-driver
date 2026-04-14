@@ -1,5 +1,4 @@
-name: Build Mali Drivers (Kimchi style)
-
+name: Build Mali Mesa 26.1 (PanVK & Panfrost-NIR)
 on:
   workflow_dispatch:
 
@@ -7,22 +6,62 @@ jobs:
   build:
     runs-on: ubuntu-22.04
     steps:
-      - name: Checkout repo
+      - name: Checkout Mesa
         uses: actions/checkout@v4
+        with:
+          repository: mesa3d/mesa
+          ref: main
+          fetch-depth: 1
 
-      - name: Run build script
+      - name: Install Build Tools
         run: |
-          chmod +x build_seperate_drivers.sh
-          ./build_seperate_drivers.sh
+          sudo apt-get update
+          sudo apt-get install -y meson ninja-build python3-mako python3-yaml \
+          libdrm-dev libxcb-randr0-dev libxcb-dri3-dev libxcb-present-dev \
+          libxcb-sync-dev libxshmfence-dev libxxf86vm-dev libx11-xcb-dev \
+          libvulkan-dev zip
 
-      - name: Upload ZINK driver
+      - name: Setup Android NDK
+        uses: nttld/setup-ndk@v1
+        with:
+          ndk-version: r26b
+
+      - name: Build PanVK (Mali Vulkan)
+        run: |
+          meson setup build-panvk \
+          -Dandroid-stub=true \
+          -Dplatforms=android \
+          -Dgallium-drivers=panfrost \
+          -Dvulkan-drivers=panfrost \
+          -Dbuildtype=release
+          ninja -C build-panvk
+          
+          mkdir -p panvk_package/lib
+          cp build-panvk/src/panfrost/vulkan/libvulkan_panfrost.so panvk_package/lib/
+          echo "driver_name=Mesa 26.1 PanVK" > panvk_package/driver.txt
+          cd panvk_package && zip -r ../mesa-panvk-26.1.zip . && cd ..
+
+      - name: Build Panfrost NIR (Mali Translation)
+        run: |
+          # NIR is the modern intermediate representation for Mali
+          meson setup build-nir \
+          -Dandroid-stub=true \
+          -Dplatforms=android \
+          -Dgallium-drivers=panfrost \
+          -Dvulkan-drivers=panfrost \
+          -Dbuildtype=release \
+          -Dgallium-nir=true
+          ninja -C build-nir
+          
+          mkdir -p mesa_nir_package/lib
+          cp build-nir/src/panfrost/vulkan/libvulkan_panfrost.so mesa_nir_package/lib/
+          echo "driver_name=Mesa 26.1 Panfrost-NIR" > mesa_nir_package/driver.txt
+          cd mesa_nir_package && zip -r ../mesa-mali-nir-26.1.zip . && cd ..
+
+      - name: Upload Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: ZINK-MESA-NIR-Mali-Driver
-          path: mali_build/zink_mesa_nir_driver.zip
-
-      - name: Upload PanVK driver
-        uses: actions/upload-artifact@v4
-        with:
-          name: PanVK-Mali-Driver
-          path: mali_build/panvk_driver.zip
+          name: mali-dual-drivers
+          path: |
+            mesa-panvk-26.1.zip
+            mesa-mali-nir-26.1.zip
