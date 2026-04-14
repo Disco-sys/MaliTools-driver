@@ -9,8 +9,8 @@ jobs:
   build:
     runs-on: ubuntu-24.04
     env:
-      NDK_VERSION: r26d          # LTS for Android 12
-      API_LEVEL: 31              # Android 12
+      NDK_VERSION: r26d
+      API_LEVEL: 31
 
     steps:
       - name: Checkout repository
@@ -24,14 +24,14 @@ jobs:
           restore-keys: |
             pip-${{ runner.os }}-
 
-      - name: Install and upgrade host dependencies (including LLVM)
+      - name: Install host dependencies (with libclc-dev)
         run: |
           sudo apt-get update -y
           sudo apt-get upgrade -y --no-install-recommends
           sudo apt-get install -y --no-install-recommends \
             wget unzip zip ninja-build meson python3-pip python3-mako patchelf \
             pkg-config cmake libxcb-*-dev libgl1-mesa-dev libegl1-mesa-dev \
-            libdrm-dev glslang-tools llvm-dev
+            libdrm-dev glslang-tools llvm-dev libclc-dev
           pip3 install --user --upgrade pip
           pip3 install --user --upgrade meson mako
           echo "$HOME/.local/bin" >> $GITHUB_PATH
