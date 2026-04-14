@@ -12,7 +12,7 @@ cd "$WORKDIR"
 sudo apt update
 sudo apt install -y \
     python3-pip ninja-build pkg-config libelf-dev wget unzip zip \
-    liblz4-dev libssl-dev libdrm-dev \
+    liblz4-dev libssl-dev \
     libx11-dev libxext-dev libxdamage-dev libxfixes-dev libxrandr-dev \
     libxcb-glx0-dev libxcb-shm0-dev libxcb-dri2-0-dev libxcb-dri3-dev \
     libxcb-present-dev libxcb-sync-dev libxshmfence-dev \
@@ -58,7 +58,7 @@ endian = 'little'
 needs_exe_wrapper = true
 EOF
 
-# Build ZINK driver (with zstd disabled)
+# Build ZINK driver (disable drm and zstd)
 meson setup build-zink \
     --cross-file "$WORKDIR/cross.txt" \
     -Dplatforms=android \
@@ -70,6 +70,7 @@ meson setup build-zink \
     -Dglx=disabled \
     -Dshared-glapi=enabled \
     -Dzstd=disabled \
+    -Dlibdrm=disabled \
     -Dc_args="-DETIME=ETIMEDOUT"
 
 meson compile -C build-zink
@@ -91,7 +92,7 @@ cat > "$WORKDIR/zink_pkg/meta.json" <<EOF
 }
 EOF
 
-# Build PanVK driver (with zstd disabled)
+# Build PanVK driver (disable drm and zstd)
 meson setup build-panvk \
     --cross-file "$WORKDIR/cross.txt" \
     -Dplatforms=android \
@@ -103,6 +104,7 @@ meson setup build-panvk \
     -Dglx=disabled \
     -Dshared-glapi=enabled \
     -Dzstd=disabled \
+    -Dlibdrm=disabled \
     -Dc_args="-DETIME=ETIMEDOUT"
 
 meson compile -C build-panvk
