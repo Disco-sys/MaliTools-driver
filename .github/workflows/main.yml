@@ -10,7 +10,6 @@ jobs:
     - name: Clone Bleeding Edge Mesa (26.1-devel)
       run: |
         git clone --depth 1 https://gitlab.freedesktop.org/mesa/mesa.git mesa-src
-        cd mesa-src
 
     - name: Setup Compiler Environment
       run: |
@@ -19,26 +18,29 @@ jobs:
           libclc-18 libclc-18-dev libelf-dev pkg-config llvm-18-dev \
           glslang-tools ninja-build flex bison python3-mako
         
-        mkdir -p ${{ github.workspace }}/installed/pkgconfig
-        
-        for pkg in libdrm libudev LLVMSPIRVLib libzstd; do
-          cat <<EOF > ${{ github.workspace }}/installed/pkgconfig/$pkg.pc
-        Name: $pkg
-        Description: Android Stub
-        Version: 99.9.9
-        Cflags: -I/usr/include
-        Libs: -L${{ github.workspace }}/installed
-        EOF
-        done
-
     - name: Setup Android NDK r27b
       uses: nttld/setup-ndk@v1
       id: setup_ndk
       with:
         ndk-version: r27b
 
-    - name: Create Native ARM64 Cross File
+    - name: Generate Stubs and Cross File
       run: |
+        # Re-creating the installed directory structure explicitly
+        mkdir -p ${{ github.workspace }}/installed/pkgconfig
+        
+        # Generating stubs for all required dependencies
+        for pkg in libdrm libudev LLVMSPIRVLib libzstd libclc; do
+          cat <<EOF > ${{ github.workspace }}/installed/pkgconfig/$pkg.pc
+        Name: $pkg
+        Description: Android Stub for $pkg
+        Version: 99.9.9
+        Cflags: -I/usr/include
+        Libs: -L${{ github.workspace }}/installed
+        EOF
+        done
+
+        # Creating the Cross File
         NDK_PATH="${{ steps.setup_ndk.outputs.ndk-path }}"
         TOOLCHAIN="$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64"
         SYSROOT="$TOOLCHAIN/sysroot"
@@ -69,10 +71,10 @@ jobs:
         source venv/bin/activate
         pip install "meson>=1.4.0" "mako>=1.2.0" "packaging==23.2" PyYAML
         
-        cd mesa-src
+        # Explicitly pointing to our fresh installed/pkgconfig dir
         export PKG_CONFIG_PATH="${{ github.workspace }}/installed/pkgconfig"
         
-        # CHANGED: -Db_lto=false to satisfy the Meson script check
+        cd mesa-src
         meson setup build-android \
           --cross-file ../android-aarch64.txt \
           -Dplatforms=android \
