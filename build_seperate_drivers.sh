@@ -1,21 +1,15 @@
 #!/bin/bash -e
 
-# ----------------------------------------
-# Configuration
-# ----------------------------------------
 WORKDIR="$PWD/mali_build"
 NDK_VERSION="r28"
 API_LEVEL="24"
 MESA_REPO="https://gitlab.freedesktop.org/mesa/mesa.git"
 MESA_BRANCH="main"
 
-# ----------------------------------------
-# Prepare environment
-# ----------------------------------------
 mkdir -p "$WORKDIR"
 cd "$WORKDIR"
 
-# Install system dependencies (if running on Ubuntu runner)
+# Install dependencies (if running on Ubuntu runner)
 sudo apt update
 sudo apt install -y python3-pip ninja-build pkg-config libelf-dev wget unzip zip libzstd-dev
 pip3 install meson mako
@@ -30,9 +24,7 @@ TOOLCHAIN="$NDK/toolchains/llvm/prebuilt/linux-x86_64"
 git clone --depth 1 --branch "$MESA_BRANCH" "$MESA_REPO"
 cd mesa
 
-# ----------------------------------------
-# Create cross compilation file (exactly like Kimchi)
-# ----------------------------------------
+# Create cross file
 cat > "$WORKDIR/cross.txt" <<EOF
 [binaries]
 c = '$TOOLCHAIN/bin/aarch64-linux-android${API_LEVEL}-clang'
@@ -51,9 +43,9 @@ endian = 'little'
 needs_exe_wrapper = true
 EOF
 
-# ----------------------------------------
-# Build Driver 1: ZINK (MESA NIR path)
-# ----------------------------------------
+# ------------------------------
+# Build ZINK driver (MESA NIR)
+# ------------------------------
 meson setup build-zink \
     --cross-file "$WORKDIR/cross.txt" \
     -Dplatforms=android \
@@ -61,16 +53,16 @@ meson setup build-zink \
     -Dvulkan-drivers= \
     -Dbuildtype=release \
     -Dllvm=disabled \
-    -Dandroid-stub=true
+    -Dandroid-stub=true \
+    -Dglx=disabled \
+    -Dshared-glapi=enabled
 
 meson compile -C build-zink
 
-# Find and copy the DRI driver
 mkdir -p "$WORKDIR/zink_pkg"
 DRIVER_PATH=$(find build-zink -name "libgallium_dri.so" | head -1)
 cp "$DRIVER_PATH" "$WORKDIR/zink_pkg/"
 
-# Create meta.json
 cat > "$WORKDIR/zink_pkg/meta.json" <<EOF
 {
   "name": "ZINK_MESA_NIR_Mali",
@@ -84,9 +76,9 @@ cat > "$WORKDIR/zink_pkg/meta.json" <<EOF
 }
 EOF
 
-# ----------------------------------------
-# Build Driver 2: PanVK
-# ----------------------------------------
+# ------------------------------
+# Build PanVK driver
+# ------------------------------
 meson setup build-panvk \
     --cross-file "$WORKDIR/cross.txt" \
     -Dplatforms=android \
@@ -94,7 +86,9 @@ meson setup build-panvk \
     -Dgallium-drivers= \
     -Dbuildtype=release \
     -Dllvm=disabled \
-    -Dandroid-stub=true
+    -Dandroid-stub=true \
+    -Dglx=disabled \
+    -Dshared-glapi=enabled
 
 meson compile -C build-panvk
 
@@ -109,13 +103,13 @@ cat > "$WORKDIR/panvk_pkg/meta.json" <<EOF
 }
 EOF
 
-# ----------------------------------------
-# Package both drivers as separate ZIPs
-# ----------------------------------------
+# ------------------------------
+# Package
+# ------------------------------
 cd "$WORKDIR"
 zip -r zink_mesa_nir_driver.zip zink_pkg/
 zip -r panvk_driver.zip panvk_pkg/
 
-echo "Build completed. Artifacts:"
+echo "Build successful. Artifacts:"
 echo "  - $WORKDIR/zink_mesa_nir_driver.zip"
 echo "  - $WORKDIR/panvk_driver.zip"
