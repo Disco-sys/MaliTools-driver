@@ -1,15 +1,15 @@
 #!/bin/bash -e
 
 WORKDIR="$PWD/mali_build"
-NDK_VERSION="r28"
-API_LEVEL="24"
+NDK_VERSION="r25c"
+API_LEVEL="31"
 MESA_REPO="https://gitlab.freedesktop.org/mesa/mesa.git"
 MESA_BRANCH="main"
 
 mkdir -p "$WORKDIR"
 cd "$WORKDIR"
 
-# Install all possible dependencies (host-side, for tools and headers)
+# Install host dependencies (Ubuntu 26.04)
 sudo apt update
 sudo apt install -y \
     python3-pip ninja-build pkg-config libelf-dev wget unzip zip \
@@ -20,9 +20,7 @@ sudo apt install -y \
     libxxf86vm-dev libxinerama-dev libxcursor-dev \
     libwayland-dev wayland-protocols \
     libgl1-mesa-dev libglu1-mesa-dev \
-    mesa-utils-extra \
     flex bison \
-    libclang-18-dev llvm-18-dev \
     libunwind-dev \
     libva-dev libvdpau-dev \
     libomxil-bellagio-dev \
@@ -32,9 +30,11 @@ sudo apt install -y \
     libsensors-dev \
     libpciaccess-dev
 
+# Upgrade pip and install meson (latest)
+pip3 install --upgrade pip
 pip3 install meson mako
 
-# Download NDK
+# Download NDK r25c
 wget -q "https://dl.google.com/android/repository/android-ndk-${NDK_VERSION}-linux.zip"
 unzip -q "android-ndk-${NDK_VERSION}-linux.zip"
 NDK="$PWD/android-ndk-${NDK_VERSION}"
@@ -63,9 +63,7 @@ endian = 'little'
 needs_exe_wrapper = true
 EOF
 
-# ------------------------------
-# Build ZINK driver (MESA NIR)
-# ------------------------------
+# Build ZINK driver (MESA NIR path)
 meson setup build-zink \
     --cross-file "$WORKDIR/cross.txt" \
     -Dplatforms=android \
@@ -96,9 +94,7 @@ cat > "$WORKDIR/zink_pkg/meta.json" <<EOF
 }
 EOF
 
-# ------------------------------
 # Build PanVK driver
-# ------------------------------
 meson setup build-panvk \
     --cross-file "$WORKDIR/cross.txt" \
     -Dplatforms=android \
@@ -123,9 +119,7 @@ cat > "$WORKDIR/panvk_pkg/meta.json" <<EOF
 }
 EOF
 
-# ------------------------------
 # Package
-# ------------------------------
 cd "$WORKDIR"
 zip -r zink_mesa_nir_driver.zip zink_pkg/
 zip -r panvk_driver.zip panvk_pkg/
