@@ -17,6 +17,7 @@ jobs:
         with:
           repository: 'mesa/mesa'
           ref: 'main'
+          path: 'mesa'               # <-- This ensures the source goes into ./mesa
 
       - name: Install host dependencies
         run: |
@@ -53,9 +54,8 @@ jobs:
       - name: Configure Mesa for PanVK
         run: |
           cd mesa
-          echo "TOOLCHAIN is: ${TOOLCHAIN}"
-          echo "API_LEVEL is: ${API_LEVEL}"
-          echo "PLATFORM_SDK_VERSION is: ${PLATFORM_SDK_VERSION}"
+          echo "Current directory: $(pwd)"
+          ls -la meson.build || { echo "ERROR: meson.build not found!"; exit 1; }
 
           if [ ! -f "${TOOLCHAIN}/bin/aarch64-linux-android${API_LEVEL}-clang" ]; then
             echo "ERROR: Compiler not found"
@@ -84,11 +84,7 @@ jobs:
           needs_exe_wrapper = true
           EOF
 
-          echo "=== Generated cross-android.txt ==="
-          cat cross-android.txt
-          echo "==================================="
-
-          meson setup build-android --cross-file cross-android.txt \
+          meson setup build-android . --cross-file cross-android.txt \
             -Dplatforms=android \
             -Dplatform-sdk-version=$PLATFORM_SDK_VERSION \
             -Dvulkan-drivers=panfrost \
