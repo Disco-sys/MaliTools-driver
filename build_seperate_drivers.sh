@@ -39,7 +39,6 @@ endian = 'little'
 needs_exe_wrapper = true
 EOF
 
-# Define ETIME to avoid compile error
 export CFLAGS="-DETIME=ETIMEDOUT"
 export CXXFLAGS="-DETIME=ETIMEDOUT"
 
@@ -47,6 +46,7 @@ meson setup build-android \
     --cross-file "$WORKDIR/cross.txt" \
     -Dplatforms=android \
     -Dvulkan-drivers=panfrost \
+    -Dgallium-drivers= \
     -Dandroid-stub=true \
     -Dbuildtype=release \
     -Dllvm=disabled
