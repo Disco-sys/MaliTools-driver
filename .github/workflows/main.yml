@@ -1,1 +1,103 @@
+name: MESA Driver
 
+on:
+  workflow_dispatch:
+
+jobs:
+  build-mali:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Clone Bleeding Edge Mesa (26.1-devel)
+      run: |
+        # Pulling the 26.1-devel source right before the April 15 Branchpoint
+        git clone --depth 1 https://gitlab.freedesktop.org/mesa/mesa.git mesa-src
+        cd mesa-src
+
+    - name: Setup Compiler Environment
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          libclc-18 libclc-18-dev libelf-dev pkg-config llvm-18-dev \
+          glslang-tools ninja-build flex bison python3-mako
+        
+        mkdir -p ${{ github.workspace }}/installed/pkgconfig
+        
+        # Creating Registration Stubs to bypass desktop dependency checks
+        for pkg in libdrm libudev LLVMSPIRVLib libzstd; do
+          cat <<EOF > ${{ github.workspace }}/installed/pkgconfig/$pkg.pc
+        Name: $pkg
+        Description: Android Stub
+        Version: 99.9.9
+        Cflags: -I/usr/include
+        Libs: -L${{ github.workspace }}/installed
+        EOF
+        done
+
+    - name: Setup Android NDK r27b
+      uses: nttld/setup-ndk@v1
+      id: setup_ndk
+      with:
+        ndk-version: r27b
+
+    - name: Create Native ARM64 Cross File
+      run: |
+        NDK_PATH="${{ steps.setup_ndk.outputs.ndk-path }}"
+        TOOLCHAIN="$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64"
+        SYSROOT="$TOOLCHAIN/sysroot"
+        
+        cat <<EOF > android-aarch64.txt
+        [binaries]
+        c = '$TOOLCHAIN/bin/aarch64-linux-android35-clang'
+        cpp = '$TOOLCHAIN/bin/aarch64-linux-android35-clang++'
+        ar = '$TOOLCHAIN/bin/llvm-ar'
+        strip = '$TOOLCHAIN/bin/llvm-strip'
+        pkg-config = '/usr/bin/pkg-config'
+        llvm-config = '/usr/bin/llvm-config-18'
+
+        [host_machine]
+        system = 'android'
+        cpu_family = 'aarch64'
+        cpu = 'armv8-a'
+        endian = 'little'
+
+        [properties]
+        needs_exe_wrapper = true
+        pkg_config_libdir = ['${{ github.workspace }}/installed/pkgconfig', '$SYSROOT/usr/lib/aarch64-linux-android/pkgconfig']
+        EOF
+
+    - name: Compile MESA Driver (Mali-G52 Optimized)
+      run: |
+        python -m venv venv
+        source venv/bin/activate
+        pip install "meson>=1.4.0" "mako>=1.2.0" "packaging==23.2" PyYAML
+        
+        cd mesa-src
+        export PKG_CONFIG_PATH="${{ github.workspace }}/installed/pkgconfig"
+        
+        # -Dfreedreno-kmds= (Empty) strips Adreno bloat
+        # -Db_lto=true maximizes performance for Helio G85
+        meson setup build-android \
+          --cross-file ../android-aarch64.txt \
+          -Dplatforms=android \
+          -Dplatform-sdk-version=35 \
+          -Dgallium-drivers=panfrost,zink \
+          -Dvulkan-drivers=panfrost \
+          -Dfreedreno-kmds= \
+          -Dbuildtype=release \
+          -Db_lto=true \
+          -Dllvm=enabled \
+          -Dandroid-stub=true \
+          -Dopengl=true \
+          -Dgles1=enabled \
+          -Dgles2=enabled \
+          -Dglvnd=disabled
+          
+        meson compile -C build-android
+
+    - name: Upload Driver Artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: MESA-Driver-Mali-G52-26.1-dev
+        path: |
+          mesa-src/build-android/src/gallium/targets/dri/libgallium_dri.so
+          mesa-src/build-android/src/panfrost/vulkan/libvulkan_panfrost.so
