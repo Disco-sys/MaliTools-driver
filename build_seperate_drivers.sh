@@ -9,7 +9,7 @@ MESA_BRANCH="main"
 mkdir -p "$WORKDIR"
 cd "$WORKDIR"
 
-# Install dependencies
+# Install host dependencies (including libzstd-dev for the host pkg-config)
 sudo apt update
 sudo apt install -y \
     python3-pip ninja-build pkg-config libelf-dev wget unzip zip \
@@ -33,7 +33,7 @@ sudo apt install -y \
 pip3 install --upgrade pip
 pip3 install meson mako
 
-# Download NDK
+# Download NDK r25c
 wget -q "https://dl.google.com/android/repository/android-ndk-${NDK_VERSION}-linux.zip"
 unzip -q "android-ndk-${NDK_VERSION}-linux.zip"
 NDK="$PWD/android-ndk-${NDK_VERSION}"
@@ -43,7 +43,7 @@ TOOLCHAIN="$NDK/toolchains/llvm/prebuilt/linux-x86_64"
 git clone --depth 1 --branch "$MESA_BRANCH" "$MESA_REPO"
 cd mesa
 
-# Create cross file
+# Create cross file (no manual CFLAGS)
 cat > "$WORKDIR/cross.txt" <<EOF
 [binaries]
 c = '$TOOLCHAIN/bin/aarch64-linux-android${API_LEVEL}-clang'
@@ -61,10 +61,6 @@ endian = 'little'
 [properties]
 needs_exe_wrapper = true
 EOF
-
-export CFLAGS="-I/usr/include"
-export CXXFLAGS="-I/usr/include"
-export PKG_CONFIG_PATH="/usr/lib/x86_64-linux-gnu/pkgconfig"
 
 # Build ZINK driver
 meson setup build-zink \
