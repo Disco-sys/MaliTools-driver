@@ -12,6 +12,14 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Cache pip packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: pip-${{ runner.os }}-${{ hashFiles('**/requirements.txt') }}
+          restore-keys: |
+            pip-${{ runner.os }}-
+
       - name: Install host dependencies
         run: |
           sudo apt-get update -y
@@ -91,7 +99,6 @@ jobs:
             -Dandroid-stub=true \
             -Dbuildtype=release \
             -Dllvm=disabled \
-            -Dgallium-opencl=disabled \
             -Dmicrosoft-clc=disabled \
             -Dopengl=true \
             -Dgbm=disabled \
