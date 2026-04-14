@@ -12,8 +12,8 @@ jobs:
 
       - name: Run build script
         run: |
-          chmod +x build_mali_drivers.sh
-          ./build_mali_drivers.sh
+          chmod +x build_seperate_drivers.sh
+          ./build_seperate_drivers.sh
 
       - name: Upload ZINK driver
         uses: actions/upload-artifact@v4
