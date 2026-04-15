@@ -16,7 +16,7 @@ jobs:
       - name: Clone Mesa
         run: git clone --depth 1 --branch main https://gitlab.freedesktop.org/mesa/mesa.git mesa
 
-      - name: Install dependencies (complete LLVM/Clang 20 stack)
+      - name: Install dependencies (LLVM 18 toolchain)
         run: |
           sudo apt-get update -y
           sudo apt-get install -y --no-install-recommends \
@@ -25,14 +25,11 @@ jobs:
             libxcb-sync-dev libxshmfence-dev libxxf86vm-dev libxrandr-dev \
             libxfixes-dev libxdamage-dev libxext-dev libgl1-mesa-dev \
             libegl1-mesa-dev libelf-dev \
-            llvm-20-dev \
-            libclang-common-20-dev \
-            libclang-cpp20-dev \
-            libclang-dev \
-            libclang1-20 \
-            libclangBasic20-dev \
-            libclc-20-dev \
-            libllvmspirvlib-20-dev \
+            llvm-18-dev \
+            libclang-18-dev \
+            libclang-cpp18-dev \
+            libclc-18-dev \
+            libllvmspirvlib-18-dev \
             glslang-tools zlib1g-dev libzstd-dev libexpat1-dev libudev-dev \
             wayland-protocols libwayland-dev libwayland-egl-backend-dev \
             libxcb-keysyms1-dev libxcb-randr0-dev libxcb-shm0-dev libxcb-xfixes0-dev \
@@ -66,7 +63,7 @@ jobs:
           ar = '${TOOLCHAIN}/bin/llvm-ar'
           strip = '${TOOLCHAIN}/bin/llvm-strip'
           pkg-config = '/usr/bin/pkg-config'
-          llvm-config = '/usr/bin/llvm-config-20'
+          llvm-config = '/usr/bin/llvm-config-18'
 
           [host_machine]
           system = 'android'
