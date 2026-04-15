@@ -1,4 +1,4 @@
-name: Mesa Native Build Test (Official Guide)
+name: Mesa Native Build Test (Full Dependencies)
 
 on: push
 
@@ -13,7 +13,7 @@ jobs:
         run: |
           git clone --depth 1 --branch main https://gitlab.freedesktop.org/mesa/mesa.git mesa
 
-      - name: Install host dependencies (per official docs + pip Meson)
+      - name: Install all Mesa build dependencies
         run: |
           sudo apt-get update -y
           sudo apt-get install -y --no-install-recommends \
@@ -39,7 +39,7 @@ jobs:
             libegl1-mesa-dev \
             libelf-dev \
             llvm-dev \
-            libclc-dev \
+            libclc-20-dev \
             glslang-tools \
             zlib1g-dev \
             libzstd-dev \
@@ -75,12 +75,17 @@ jobs:
             libxkbcommon-x11-dev \
             libvulkan-dev \
             glslang-dev \
-            spirv-tools
+            spirv-tools \
+            wget \
+            unzip \
+            zip \
+            patchelf
 
+          pip3 install --user --upgrade pip
           pip3 install --user --upgrade 'meson>=1.4.0' mako packaging
           echo "$HOME/.local/bin" >> $GITHUB_PATH
 
-      - name: Configure Mesa (llvmpipe only)
+      - name: Configure Mesa (llvmpipe test)
         run: |
           cd mesa
           meson setup build . \
@@ -95,4 +100,4 @@ jobs:
           meson compile -C build
 
       - name: Confirm success
-        run: echo "Mesa native build completed successfully!"
+        run: echo "✅ Mesa native build completed successfully! All dependencies are satisfied."
