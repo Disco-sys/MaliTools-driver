@@ -16,7 +16,7 @@ jobs:
       - name: Clone Mesa
         run: git clone --depth 1 --branch main https://gitlab.freedesktop.org/mesa/mesa.git mesa
 
-      - name: Install dependencies
+      - name: Install dependencies (full LLVM + SPIRV)
         run: |
           sudo apt-get update -y
           sudo apt-get install -y --no-install-recommends \
@@ -24,17 +24,18 @@ jobs:
             libdrm-dev libx11-xcb-dev libxcb-dri3-dev libxcb-present-dev \
             libxcb-sync-dev libxshmfence-dev libxxf86vm-dev libxrandr-dev \
             libxfixes-dev libxdamage-dev libxext-dev libgl1-mesa-dev \
-            libegl1-mesa-dev libelf-dev llvm-dev libclc-20-dev glslang-tools \
-            zlib1g-dev libzstd-dev libexpat1-dev libudev-dev wayland-protocols \
-            libwayland-dev libwayland-egl-backend-dev libxcb-keysyms1-dev \
-            libxcb-randr0-dev libxcb-shm0-dev libxcb-xfixes0-dev libxcb-xtest0-dev \
-            libxcb-xinerama0-dev libxcb-composite0-dev libxcb-damage0-dev \
-            libxcb-dpms0-dev libxcb-dri2-0-dev libxcb-glx0-dev libxcb-record0-dev \
-            libxcb-res0-dev libxcb-screensaver0-dev libxcb-shape0-dev \
+            libegl1-mesa-dev libelf-dev \
+            llvm-20-dev libclc-20-dev libllvmspirvlib-20-dev \
+            glslang-tools zlib1g-dev libzstd-dev libexpat1-dev libudev-dev \
+            wayland-protocols libwayland-dev libwayland-egl-backend-dev \
+            libxcb-keysyms1-dev libxcb-randr0-dev libxcb-shm0-dev libxcb-xfixes0-dev \
+            libxcb-xtest0-dev libxcb-xinerama0-dev libxcb-composite0-dev \
+            libxcb-damage0-dev libxcb-dpms0-dev libxcb-dri2-0-dev libxcb-glx0-dev \
+            libxcb-record0-dev libxcb-res0-dev libxcb-screensaver0-dev libxcb-shape0-dev \
             libxcb-xf86dri0-dev libxcb-xv0-dev libxcb-xvmc0-dev libxcb-icccm4-dev \
             libxcb-image0-dev libxcb-util-dev libxcb-cursor-dev libxcb-xkb-dev \
-            libxkbcommon-dev libxkbcommon-x11-dev libvulkan-dev glslang-dev \
-            spirv-tools wget unzip zip patchelf
+            libxkbcommon-dev libxkbcommon-x11-dev libvulkan-dev glslang-dev spirv-tools \
+            wget unzip zip patchelf
 
           pip3 install --user --upgrade pip
           pip3 install --user --upgrade meson mako packaging
@@ -58,7 +59,7 @@ jobs:
           ar = '${TOOLCHAIN}/bin/llvm-ar'
           strip = '${TOOLCHAIN}/bin/llvm-strip'
           pkg-config = '/usr/bin/pkg-config'
-          llvm-config = '/usr/bin/llvm-config'
+          llvm-config = '/usr/bin/llvm-config-20'
 
           [host_machine]
           system = 'android'
