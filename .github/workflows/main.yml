@@ -12,11 +12,9 @@ jobs:
       NDK_VERSION: r29
       API_LEVEL: 34
     steps:
-      # 1. Clone Mesa (unchanged)
       - name: Clone Mesa source
         run: git clone --depth 1 --branch main https://gitlab.freedesktop.org/mesa/mesa.git mesa
 
-      # 2. Install dependencies (unchanged - the exact working set)
       - name: Install all Mesa build dependencies
         run: |
           sudo apt-get update -y
@@ -40,7 +38,6 @@ jobs:
           pip3 install --user --upgrade 'meson>=1.4.0' mako packaging
           echo "$HOME/.local/bin" >> $GITHUB_PATH
 
-      # 3. Prepare offline compiler (unchanged)
       - name: Prepare offline compiler for PanVK
         run: |
           cd mesa
@@ -56,7 +53,6 @@ jobs:
           meson install -C build-host
           echo "/tmp/mesa-host/bin" >> $GITHUB_PATH
 
-      # 4. Download NDK (unchanged)
       - name: Download Android NDK
         run: |
           mkdir -p $HOME/ndk
@@ -65,7 +61,6 @@ jobs:
           unzip -q android-ndk-${NDK_VERSION}-linux.zip
           echo "ANDROID_NDK_HOME=$HOME/ndk/android-ndk-${NDK_VERSION}" >> $GITHUB_ENV
 
-      # 5. Cross‑compile PanVK with EXPLICIT OPTIMIZATION FLAGS
       - name: Cross‑compile PanVK for Android
         run: |
           cd mesa
@@ -103,13 +98,11 @@ jobs:
             -Dvulkan-drivers=panfrost \
             -Dllvm=disabled \
             -Doptimization=3 \
-            -Db_lto=true \
             -Db_ndebug=true \
             --strip
 
           meson compile -C build-android src/panfrost/vulkan/libvulkan_panfrost.so
 
-      # 6. Package (unchanged)
       - name: Package PanVK driver
         run: |
           mkdir -p artifact
