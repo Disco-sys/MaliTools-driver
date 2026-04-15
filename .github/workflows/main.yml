@@ -16,80 +16,27 @@ jobs:
       - name: Clone Mesa source
         run: git clone --depth 1 --branch main https://gitlab.freedesktop.org/mesa/mesa.git mesa
 
-      - name: Install dependencies (LLVM 18 toolchain, per official guide)
+      - name: Install base build tools
         run: |
           sudo apt-get update -y
           sudo apt-get install -y --no-install-recommends \
-            ninja-build \
-            python3-pip \
-            python3-mako \
-            pkg-config \
-            cmake \
-            flex \
-            bison \
-            libdrm-dev \
-            libx11-xcb-dev \
-            libxcb-dri3-dev \
-            libxcb-present-dev \
-            libxcb-sync-dev \
-            libxshmfence-dev \
-            libxxf86vm-dev \
-            libxrandr-dev \
-            libxfixes-dev \
-            libxdamage-dev \
-            libxext-dev \
-            libgl1-mesa-dev \
-            libegl1-mesa-dev \
-            libelf-dev \
-            llvm-18-dev \
-            libclang-18-dev \
-            libclang-cpp18-dev \
-            libclc-18-dev \
-            libllvmspirvlib-18-dev \
-            glslang-tools \
-            zlib1g-dev \
-            libzstd-dev \
-            libexpat1-dev \
-            libudev-dev \
-            wayland-protocols \
-            libwayland-dev \
-            libwayland-egl-backend-dev \
-            libxcb-keysyms1-dev \
-            libxcb-randr0-dev \
-            libxcb-shm0-dev \
-            libxcb-xfixes0-dev \
-            libxcb-xtest0-dev \
-            libxcb-xinerama0-dev \
-            libxcb-composite0-dev \
-            libxcb-damage0-dev \
-            libxcb-dpms0-dev \
-            libxcb-dri2-0-dev \
-            libxcb-glx0-dev \
-            libxcb-record0-dev \
-            libxcb-res0-dev \
-            libxcb-screensaver0-dev \
-            libxcb-shape0-dev \
-            libxcb-xf86dri0-dev \
-            libxcb-xv0-dev \
-            libxcb-xvmc0-dev \
-            libxcb-icccm4-dev \
-            libxcb-image0-dev \
-            libxcb-util-dev \
-            libxcb-cursor-dev \
-            libxcb-xkb-dev \
-            libxkbcommon-dev \
-            libxkbcommon-x11-dev \
-            libvulkan-dev \
-            glslang-dev \
-            spirv-tools \
-            wget \
-            unzip \
-            zip \
-            patchelf
+            ninja-build python3-pip python3-mako pkg-config cmake flex bison \
+            wget unzip zip patchelf xz-utils
 
           pip3 install --user --upgrade pip
-          pip3 install --user --upgrade meson mako packaging
+          pip3 install --user --upgrade meson packaging
           echo "$HOME/.local/bin" >> $GITHUB_PATH
+
+      - name: Download and setup prebuilt LLVM/Clang 18
+        run: |
+          mkdir -p dependencies/llvm
+          cd dependencies/llvm
+          wget -q https://github.com/llvm/llvm-project/releases/download/llvmorg-18.1.8/clang+llvm-18.1.8-x86_64-linux-gnu-ubuntu-24.04.tar.xz
+          tar -xf clang+llvm-18.1.8-x86_64-linux-gnu-ubuntu-24.04.tar.xz --strip-components=1
+          rm clang+llvm-18.1.8-x86_64-linux-gnu-ubuntu-24.04.tar.xz
+          echo "LLVM_DIR=$PWD" >> $GITHUB_ENV
+          echo "$PWD/bin" >> $GITHUB_PATH
+          echo "PKG_CONFIG_PATH=$PWD/lib/pkgconfig:$PKG_CONFIG_PATH" >> $GITHUB_ENV
 
       - name: Download Android NDK
         run: |
@@ -109,7 +56,7 @@ jobs:
           ar = '${TOOLCHAIN}/bin/llvm-ar'
           strip = '${TOOLCHAIN}/bin/llvm-strip'
           pkg-config = '/usr/bin/pkg-config'
-          llvm-config = '/usr/bin/llvm-config-18'
+          llvm-config = '${LLVM_DIR}/bin/llvm-config'
 
           [host_machine]
           system = 'android'
