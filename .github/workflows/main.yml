@@ -1,4 +1,4 @@
-name: PanVK Mali Driver (Android)
+name: PanVK Mali Driver
 
 on: push
 
@@ -13,11 +13,10 @@ jobs:
       API_LEVEL: 31
       PLATFORM_SDK_VERSION: 34
     steps:
-      - name: Clone Mesa source
-        run: |
-          git clone --depth 1 --branch main https://gitlab.freedesktop.org/mesa/mesa.git mesa
+      - name: Clone Mesa
+        run: git clone --depth 1 --branch main https://gitlab.freedesktop.org/mesa/mesa.git mesa
 
-      - name: Install all Mesa build dependencies (same as your success!)
+      - name: Install dependencies
         run: |
           sudo apt-get update -y
           sudo apt-get install -y --no-install-recommends \
@@ -38,20 +37,18 @@ jobs:
             spirv-tools wget unzip zip patchelf
 
           pip3 install --user --upgrade pip
-          pip3 install --user --upgrade 'meson>=1.4.0' mako packaging
+          pip3 install --user --upgrade meson mako packaging
           echo "$HOME/.local/bin" >> $GITHUB_PATH
 
-      - name: Download Android NDK
+      - name: Download NDK
         run: |
-          echo "NDK installing..."
           mkdir -p dependencies/NDK
           cd dependencies/NDK
           wget -q https://dl.google.com/android/repository/android-ndk-${NDK_VERSION}-linux.zip
           unzip -q android-ndk-${NDK_VERSION}-linux.zip
           echo "TOOLCHAIN=$PWD/android-ndk-${NDK_VERSION}/toolchains/llvm/prebuilt/linux-x86_64" >> $GITHUB_ENV
-          echo "NDK installed."
 
-      - name: Configure and compile PanVK for Android
+      - name: Configure and compile PanVK
         run: |
           cd mesa
           cat > cross-android.txt <<EOF
@@ -88,7 +85,7 @@ jobs:
 
           meson compile -C build-android src/panfrost/vulkan/libvulkan_panfrost.so
 
-      - name: Package PanVK driver
+      - name: Package driver
         run: |
           mkdir -p install
           cp mesa/build-android/src/panfrost/vulkan/libvulkan_panfrost.so install/
