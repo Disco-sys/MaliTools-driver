@@ -1,129 +1,62 @@
-name: PanVK Mali Driver (Android ARM64)
+name: Build PanVK Mesa 26.1-dev
 
-on: push
-
-permissions:
-  contents: read
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
 
 jobs:
   build:
-    runs-on: ubuntu-24.04                # Use explicit 24.04 for newer packages
-    env:
-      NDK_VERSION: r29
-      API_LEVEL: 34                      # NDK r29 uses API 34 by default for clang
+    runs-on: ubuntu-latest
     steps:
-      - name: Clone Mesa source
-        run: git clone --depth 1 --branch main https://gitlab.freedesktop.org/mesa/mesa.git mesa
+      - name: Checkout Mesa Source
+        uses: actions/checkout@v4
+        with:
+          repository: mesa3d/mesa
+          ref: main # Mesa 26.1-dev is currently the main branch
 
-      - name: Install host dependencies
+      - name: Install System Dependencies
         run: |
-          sudo apt-get update -y
-          # Use build-dep to automatically install most required packages
-          sudo apt-get build-dep mesa -y
-          # Install additional tools and libraries not covered by build-dep
-          sudo apt-get install -y --no-install-recommends \
-            ninja-build \
-            python3-pip \
-            python3-mako \
-            pkg-config \
-            cmake \
-            flex \
-            bison \
-            wget \
-            unzip \
-            zip \
-            patchelf \
-            libdrm-dev \
-            wayland-protocols \
-            libwayland-dev \
-            libwayland-egl-backend-dev \
-            libxcb-*-dev \
-            libx11-xcb-dev \
-            libvulkan-dev \
-            glslang-tools \
-            spirv-tools
+          sudo apt update
+          # Essential build tools and Mesa dev headers
+          sudo apt install -y meson ninja-build pkg-config \
+            python3-mako python3-packaging python3-yaml \
+            libdrm-dev libx11-dev libxext-dev libxdamage-dev \
+            libxcb-glx0-dev libxcb-dri2-0-dev libxcb-dri3-dev \
+            libxcb-present-dev libxcb-sync-dev libxshmfence-dev \
+            libxxf86vm-dev libx11-xcb-dev libwayland-dev \
+            wayland-protocols libwayland-egl-backend-dev \
+            libudev-dev libelf-dev libexpat1-dev bison flex
 
-          # Install latest Meson and required Python modules
-          pip3 install --user --upgrade pip
-          pip3 install --user --upgrade 'meson>=1.4.0' mako packaging pyyaml
-          echo "$HOME/.local/bin" >> $GITHUB_PATH
-
-      - name: Prepare offline compiler for PanVK (required for cross‑compile)
+      - name: Update Python Build Tools
         run: |
-          cd mesa
-          meson setup build-host \
-            -Dprefix=/tmp/mesa-host \
+          # Mesa 26.1-dev often needs newer Python packages than Ubuntu stable
+          python3 -m pip install --user --upgrade meson mako packaging yaml
+
+      - name: Meson Setup (PanVK Configuration)
+        run: |
+          # Configuring specifically for PanVK and Panfrost
+          # LLVM is disabled here as it is often not needed for Mali Vulkan
+          meson setup builddir/ \
+            --prefix=$HOME/mesa-install \
             -Dbuildtype=release \
-            -Dstrip=true \
-            -Dplatforms= \
-            -Dgallium-drivers= \
-            -Dvulkan-drivers= \
-            -Dtools=panfrost \
-            -Dinstall-precomp-compiler=true
-          meson install -C build-host
-          echo "/tmp/mesa-host/bin" >> $GITHUB_PATH
-
-      - name: Download Android NDK
-        run: |
-          mkdir -p $HOME/ndk
-          cd $HOME/ndk
-          wget -q https://dl.google.com/android/repository/android-ndk-${NDK_VERSION}-linux.zip
-          unzip -q android-ndk-${NDK_VERSION}-linux.zip
-          echo "ANDROID_NDK_HOME=$HOME/ndk/android-ndk-${NDK_VERSION}" >> $GITHUB_ENV
-
-      - name: Cross‑compile PanVK for Android
-        run: |
-          cd mesa
-          # Create a correct cross file for the NDK
-          cat > android-aarch64.ini << EOF
-          [constants]
-          ndk_path = '${{ env.ANDROID_NDK_HOME }}'
-
-          [binaries]
-          ar = ndk_path / 'toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'
-          c = ndk_path / 'toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android${API_LEVEL}-clang'
-          cpp = ndk_path / 'toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android${API_LEVEL}-clang++'
-          strip = ndk_path / 'toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip'
-          pkg-config = '/usr/bin/pkg-config'
-
-          [host_machine]
-          system = 'android'
-          cpu_family = 'aarch64'
-          cpu = 'armv8-a'
-          endian = 'little'
-
-          [built-in options]
-          c_args = ['-DANDROID', '-DETIME=ETIMEDOUT']
-          cpp_args = ['-DANDROID', '-DETIME=ETIMEDOUT']
-
-          [properties]
-          needs_exe_wrapper = true
-          EOF
-
-          # Configure with only PanVK enabled, LLVM disabled (PanVK does not need LLVM)
-          meson setup build-android \
-            --cross-file android-aarch64.ini \
-            -Dplatforms=android \
-            -Dplatform-sdk-version=${API_LEVEL} \
-            -Dandroid-stub=true \
-            -Dgallium-drivers= \
-            -Dvulkan-drivers=panfrost \
+            -Dplatforms=wayland,x11 \
+            -Dgallium-drivers=panfrost \
+            -Dvulkan-drivers=panvk \
             -Dllvm=disabled \
-            -Dbuildtype=release \
-            --strip
+            -Dvideo-codecs=all \
+            -Dgles1=disabled \
+            -Dgles2=enabled
 
-          # Compile only the Vulkan ICD
-          meson compile -C build-android src/panfrost/vulkan/libvulkan_panfrost.so
-
-      - name: Package driver
+      - name: Compile and Install
         run: |
-          mkdir -p artifact
-          cp mesa/build-android/src/panfrost/vulkan/libvulkan_panfrost.so artifact/
-          cd artifact
-          zip ../panvk-mali-driver.zip libvulkan_panfrost.so
+          ninja -C builddir/
+          meson install -C builddir/
 
-      - name: Upload artifact
+      - name: Upload Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: panvk-mali-driver
-          path: panvk-mali-driver.zip
+          name: mesa-panvk-build
+          path: ~/mesa-install
