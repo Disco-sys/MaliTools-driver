@@ -39,7 +39,7 @@ jobs:
           pip3 install --user --upgrade 'meson>=1.4.0' mako packaging
           echo "$HOME/.local/bin" >> $GITHUB_PATH
 
-      - name: Prepare offline compiler for PanVK (LLVM/CLC disabled)
+      - name: Prepare offline compiler for PanVK (LLVM disabled)
         run: |
           cd mesa
           meson setup build-host \
@@ -52,7 +52,6 @@ jobs:
             -Dglx=disabled \
             -Degl=disabled \
             -Dllvm=disabled \
-            -Dclc=disabled \
             -Dtools=panfrost \
             -Dinstall-precomp-compiler=true
           meson install -C build-host
@@ -102,7 +101,6 @@ jobs:
             -Dgallium-drivers= \
             -Dvulkan-drivers=panfrost \
             -Dllvm=disabled \
-            -Dclc=disabled \
             -Doptimization=3 \
             -Db_ndebug=true \
             --strip
