@@ -1,4 +1,4 @@
-name: Mesa Native Build Test (Full Dependencies)
+name: PanVK Mali Driver (Cross-compile)
 
 on: push
 
@@ -85,19 +85,75 @@ jobs:
           pip3 install --user --upgrade 'meson>=1.4.0' mako packaging
           echo "$HOME/.local/bin" >> $GITHUB_PATH
 
-      - name: Configure Mesa (llvmpipe test)
+      - name: Prepare offline compiler for PanVK
         run: |
           cd mesa
-          meson setup build . \
-            -Dgallium-drivers=llvmpipe \
+          meson setup build-host \
+            -Dprefix=/tmp/mesa-host \
+            -Dbuildtype=release \
+            -Dstrip=true \
+            -Dplatforms= \
+            -Dgallium-drivers= \
             -Dvulkan-drivers= \
+            -Dtools=panfrost \
+            -Dinstall-precomp-compiler=true
+          meson install -C build-host
+          echo "/tmp/mesa-host/bin" >> $GITHUB_PATH
+
+      - name: Download Android NDK
+        run: |
+          mkdir -p $HOME/ndk
+          cd $HOME/ndk
+          wget -q https://dl.google.com/android/repository/android-ndk-r29-linux.zip
+          unzip -q android-ndk-r29-linux.zip
+          echo "ANDROID_NDK_HOME=$HOME/ndk/android-ndk-r29" >> $GITHUB_ENV
+
+      - name: Cross-compile PanVK for Android
+        run: |
+          cd mesa
+          # Create a Meson cross file for Android
+          cat > android-aarch64.ini << EOF
+          [constants]
+          ndk_path = '${{ env.ANDROID_NDK_HOME }}'
+
+          [binaries]
+          ar = ndk_path / 'toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android-ar'
+          c = ['ccache', ndk_path / 'toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android34-clang']
+          cpp = ['ccache', ndk_path / 'toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android34-clang++', '-fno-exceptions', '-fno-unwind-tables', '-fno-asynchronous-unwind-tables', '-static-libstdc++']
+          c_ld = 'lld'
+          cpp_ld = 'lld'
+          strip = ndk_path / 'toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android-strip'
+          pkgconfig = ['env', 'PKG_CONFIG_LIBDIR=NDKDIR/pkgconfig', '/usr/bin/pkg-config']
+
+          [host_machine]
+          system = 'android'
+          cpu_family = 'aarch64'
+          cpu = 'armv8'
+          endian = 'little'
+          EOF
+
+          # Configure and build for Android
+          meson setup build-android \
+            --cross-file android-aarch64.ini \
+            -Dplatforms=android \
+            -Dplatform-sdk-version=34 \
+            -Dandroid-stub=true \
+            -Dgallium-drivers= \
+            -Dvulkan-drivers=panfrost \
             -Dllvm=enabled \
             -Dbuildtype=release
 
-      - name: Compile Mesa
-        run: |
-          cd mesa
-          meson compile -C build
+          meson compile -C build-android
 
-      - name: Confirm success
-        run: echo "✅ Mesa native build completed successfully! All dependencies are satisfied."
+      - name: Package PanVK driver
+        run: |
+          mkdir -p artifact
+          cp mesa/build-android/src/panfrost/vulkan/libvulkan_panfrost.so artifact/
+          cd artifact
+          zip ../panvk-mali-driver.zip libvulkan_panfrost.so
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: panvk-mali-driver
+          path: panvk-mali-driver.zip
