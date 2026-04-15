@@ -1,4 +1,4 @@
-name: PanVK Mali Driver (Android ARM64) - Mesa 25.1.0
+name: PanVK Mali Driver (Android ARM64) - Mesa 25.1.0 (No LLVM)
 
 on: push
 
@@ -16,7 +16,7 @@ jobs:
       - name: Clone Mesa source (25.1.0)
         run: git clone --depth 1 --branch ${{ env.MESA_TAG }} https://gitlab.freedesktop.org/mesa/mesa.git mesa
 
-      - name: Install all build dependencies (LLVM 18)
+      - name: Install base build tools
         run: |
           sudo apt-get update -y
           sudo apt-get install -y --no-install-recommends \
@@ -24,17 +24,10 @@ jobs:
             libdrm-dev libx11-xcb-dev libxcb-dri3-dev libxcb-present-dev \
             libxcb-sync-dev libxshmfence-dev libxxf86vm-dev libxrandr-dev \
             libxfixes-dev libxdamage-dev libxext-dev libgl1-mesa-dev \
-            libegl1-mesa-dev libelf-dev \
-            llvm-18-dev \
-            libclang-18-dev \
-            libclang-cpp18-dev \
-            libclang-common-18-dev \
-            libclc-18-dev \
-            libllvmspirvlib-18-dev \
-            glslang-tools \
-            zlib1g-dev libzstd-dev libexpat1-dev libudev-dev wayland-protocols \
-            libwayland-dev libwayland-egl-backend-dev libxcb-keysyms1-dev \
-            libxcb-randr0-dev libxcb-shm0-dev libxcb-xfixes0-dev libxcb-xtest0-dev \
+            libegl1-mesa-dev libelf-dev glslang-tools zlib1g-dev libzstd-dev \
+            libexpat1-dev libudev-dev wayland-protocols libwayland-dev \
+            libwayland-egl-backend-dev libxcb-keysyms1-dev libxcb-randr0-dev \
+            libxcb-shm0-dev libxcb-xfixes0-dev libxcb-xtest0-dev \
             libxcb-xinerama0-dev libxcb-composite0-dev libxcb-damage0-dev \
             libxcb-dpms0-dev libxcb-dri2-0-dev libxcb-glx0-dev libxcb-record0-dev \
             libxcb-res0-dev libxcb-screensaver0-dev libxcb-shape0-dev \
@@ -46,7 +39,7 @@ jobs:
           pip3 install --user --upgrade 'meson>=1.4.0' mako packaging
           echo "$HOME/.local/bin" >> $GITHUB_PATH
 
-      - name: Prepare offline compiler for PanVK
+      - name: Prepare offline compiler for PanVK (No LLVM)
         run: |
           cd mesa
           meson setup build-host \
@@ -58,6 +51,7 @@ jobs:
             -Dvulkan-drivers= \
             -Dglx=disabled \
             -Degl=disabled \
+            -Dllvm=disabled \
             -Dtools=panfrost \
             -Dinstall-precomp-compiler=true
           meson install -C build-host
@@ -71,7 +65,7 @@ jobs:
           unzip -q android-ndk-${NDK_VERSION}-linux.zip
           echo "ANDROID_NDK_HOME=$HOME/ndk/android-ndk-${NDK_VERSION}" >> $GITHUB_ENV
 
-      - name: Cross‑compile PanVK for Android
+      - name: Cross‑compile PanVK for Android (No LLVM)
         run: |
           cd mesa
           cat > android-aarch64.ini << EOF
@@ -84,7 +78,6 @@ jobs:
           cpp = ndk_path / 'toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android${API_LEVEL}-clang++'
           strip = ndk_path / 'toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip'
           pkg-config = '/usr/bin/pkg-config'
-          llvm-config = '/usr/bin/llvm-config-18'
 
           [host_machine]
           system = 'android'
@@ -100,7 +93,6 @@ jobs:
           needs_exe_wrapper = true
           EOF
 
-          export PKG_CONFIG_PATH="/usr/lib/llvm-18/lib/pkgconfig:$PKG_CONFIG_PATH"
           meson setup build-android \
             --cross-file android-aarch64.ini \
             -Dplatforms=android \
@@ -108,7 +100,7 @@ jobs:
             -Dandroid-stub=true \
             -Dgallium-drivers= \
             -Dvulkan-drivers=panfrost \
-            -Dllvm=enabled \
+            -Dllvm=disabled \
             -Doptimization=3 \
             -Db_ndebug=true \
             --strip
