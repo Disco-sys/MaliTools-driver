@@ -21,22 +21,23 @@ jobs:
           sudo apt-get update -y
           sudo apt-get install -y --no-install-recommends \
             ninja-build python3-pip python3-mako pkg-config cmake flex bison \
-            wget unzip zip patchelf xz-utils
+            wget unzip zip patchelf xz-utils lsb-release gnupg
 
           pip3 install --user --upgrade pip
           pip3 install --user --upgrade meson packaging
           echo "$HOME/.local/bin" >> $GITHUB_PATH
 
-      - name: Download and setup prebuilt LLVM/Clang 18
+      - name: Install LLVM 18 from official APT repository
         run: |
-          mkdir -p dependencies/llvm
-          cd dependencies/llvm
-          wget -q https://github.com/llvm/llvm-project/releases/download/llvmorg-18.1.8/clang+llvm-18.1.8-x86_64-linux-gnu-ubuntu-24.04.tar.xz
-          tar -xf clang+llvm-18.1.8-x86_64-linux-gnu-ubuntu-24.04.tar.xz --strip-components=1
-          rm clang+llvm-18.1.8-x86_64-linux-gnu-ubuntu-24.04.tar.xz
-          echo "LLVM_DIR=$PWD" >> $GITHUB_ENV
-          echo "$PWD/bin" >> $GITHUB_PATH
-          echo "PKG_CONFIG_PATH=$PWD/lib/pkgconfig:$PKG_CONFIG_PATH" >> $GITHUB_ENV
+          wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | sudo tee /etc/apt/trusted.gpg.d/apt.llvm.org.asc
+          sudo add-apt-repository "deb http://apt.llvm.org/$(lsb_release -sc)/ llvm-toolchain-$(lsb_release -sc)-18 main"
+          sudo apt-get update -y
+          sudo apt-get install -y --no-install-recommends \
+            llvm-18-dev \
+            libclang-18-dev \
+            libclang-cpp18-dev \
+            libclc-18-dev \
+            libllvmspirvlib-18-dev
 
       - name: Download Android NDK
         run: |
@@ -56,7 +57,7 @@ jobs:
           ar = '${TOOLCHAIN}/bin/llvm-ar'
           strip = '${TOOLCHAIN}/bin/llvm-strip'
           pkg-config = '/usr/bin/pkg-config'
-          llvm-config = '${LLVM_DIR}/bin/llvm-config'
+          llvm-config = '/usr/bin/llvm-config-18'
 
           [host_machine]
           system = 'android'
