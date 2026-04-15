@@ -58,6 +58,7 @@ jobs:
           ar = '${TOOLCHAIN}/bin/llvm-ar'
           strip = '${TOOLCHAIN}/bin/llvm-strip'
           pkg-config = '/usr/bin/pkg-config'
+          llvm-config = '/usr/bin/llvm-config'
 
           [host_machine]
           system = 'android'
@@ -78,10 +79,7 @@ jobs:
             -Dplatform-sdk-version=$PLATFORM_SDK_VERSION \
             -Dvulkan-drivers=panfrost \
             -Dgallium-drivers= \
-            -Dllvm=disabled \
-            -Dopencl=disabled \
-            -Dgallium-opencl=disabled \
-            -Dmicrosoft-clc=disabled \
+            -Dllvm=enabled \
             -Dandroid-stub=true \
             -Dbuildtype=release \
             --strip
