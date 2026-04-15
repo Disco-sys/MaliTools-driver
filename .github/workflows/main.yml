@@ -3,42 +3,40 @@ name: Build PanVK Mesa 26.1-dev
 on:
   push:
     branches: [ main ]
-  pull_request:
-    branches: [ main ]
   workflow_dispatch:
 
 jobs:
-  build:
+  build-panvk:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout Mesa Source
-        uses: actions/checkout@v4
-        with:
-          repository: mesa3d/mesa
-          ref: main # Mesa 26.1-dev is currently the main branch
+      # 1. Manually clone from GitLab (Fastest/Most Reliable for Mesa)
+      - name: Clone Mesa from GitLab
+        run: |
+          git clone --depth 1 https://gitlab.freedesktop.org/mesa/mesa.git
+          cd mesa
+          echo "MESA_ROOT=$(pwd)" >> $GITHUB_ENV
 
+      # 2. Install Build Dependencies
       - name: Install System Dependencies
         run: |
           sudo apt update
-          # Essential build tools and Mesa dev headers
-          sudo apt install -y meson ninja-build pkg-config \
-            python3-mako python3-packaging python3-yaml \
-            libdrm-dev libx11-dev libxext-dev libxdamage-dev \
-            libxcb-glx0-dev libxcb-dri2-0-dev libxcb-dri3-dev \
-            libxcb-present-dev libxcb-sync-dev libxshmfence-dev \
-            libxxf86vm-dev libx11-xcb-dev libwayland-dev \
-            wayland-protocols libwayland-egl-backend-dev \
-            libudev-dev libelf-dev libexpat1-dev bison flex
+          sudo apt build-dep mesa -y
+          sudo apt install -y python3-pip ninja-build pkg-config \
+            libwayland-dev wayland-protocols libdrm-dev \
+            libx11-xcb-dev libxcb-dri3-dev libxcb-present-dev \
+            libxshmfence-dev libudev-dev libelf-dev
 
-      - name: Update Python Build Tools
+      # 3. Upgrade Meson/Mako for 26.1-dev requirements
+      - name: Update Python Tools
         run: |
-          # Mesa 26.1-dev often needs newer Python packages than Ubuntu stable
           python3 -m pip install --user --upgrade meson mako packaging yaml
 
-      - name: Meson Setup (PanVK Configuration)
+      # 4. Meson Configuration
+      - name: Meson Setup
+        working-directory: mesa
         run: |
-          # Configuring specifically for PanVK and Panfrost
-          # LLVM is disabled here as it is often not needed for Mali Vulkan
+          # Explicitly targeting PanVK and Panfrost (Mali GPU)
+          # Disabling LLVM to avoid common version mismatch errors on runners
           meson setup builddir/ \
             --prefix=$HOME/mesa-install \
             -Dbuildtype=release \
@@ -46,17 +44,21 @@ jobs:
             -Dgallium-drivers=panfrost \
             -Dvulkan-drivers=panvk \
             -Dllvm=disabled \
-            -Dvideo-codecs=all \
             -Dgles1=disabled \
-            -Dgles2=enabled
+            -Dgles2=enabled \
+            -Dvideo-codecs=all \
+            -Dglvnd=true
 
+      # 5. Build and Local Install
       - name: Compile and Install
+        working-directory: mesa
         run: |
           ninja -C builddir/
           meson install -C builddir/
 
-      - name: Upload Artifacts
+      # 6. Upload the built driver as an artifact
+      - name: Upload Build Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: mesa-panvk-build
+          name: mesa-panvk-binaries
           path: ~/mesa-install
