@@ -1,4 +1,4 @@
-name: PanVK Mali Driver (Android ARM64) - Mesa 25.1.0 (No LLVM)
+name: PanVK Mali Driver (Android ARM64) - Mesa 25.1.0
 
 on: push
 
@@ -16,7 +16,7 @@ jobs:
       - name: Clone Mesa source (25.1.0)
         run: git clone --depth 1 --branch ${{ env.MESA_TAG }} https://gitlab.freedesktop.org/mesa/mesa.git mesa
 
-      - name: Install base build tools
+      - name: Install base build tools (no LLVM)
         run: |
           sudo apt-get update -y
           sudo apt-get install -y --no-install-recommends \
@@ -39,7 +39,7 @@ jobs:
           pip3 install --user --upgrade 'meson>=1.4.0' mako packaging
           echo "$HOME/.local/bin" >> $GITHUB_PATH
 
-      - name: Prepare offline compiler for PanVK (No LLVM)
+      - name: Prepare offline compiler for PanVK (LLVM/CLC disabled)
         run: |
           cd mesa
           meson setup build-host \
@@ -52,6 +52,7 @@ jobs:
             -Dglx=disabled \
             -Degl=disabled \
             -Dllvm=disabled \
+            -Dclc=disabled \
             -Dtools=panfrost \
             -Dinstall-precomp-compiler=true
           meson install -C build-host
@@ -65,7 +66,7 @@ jobs:
           unzip -q android-ndk-${NDK_VERSION}-linux.zip
           echo "ANDROID_NDK_HOME=$HOME/ndk/android-ndk-${NDK_VERSION}" >> $GITHUB_ENV
 
-      - name: Cross‑compile PanVK for Android (No LLVM)
+      - name: Cross‑compile PanVK for Android (LLVM disabled)
         run: |
           cd mesa
           cat > android-aarch64.ini << EOF
@@ -101,6 +102,7 @@ jobs:
             -Dgallium-drivers= \
             -Dvulkan-drivers=panfrost \
             -Dllvm=disabled \
+            -Dclc=disabled \
             -Doptimization=3 \
             -Db_ndebug=true \
             --strip
