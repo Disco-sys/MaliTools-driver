@@ -15,36 +15,25 @@ jobs:
       - name: Clone Mesa source
         run: git clone --depth 1 --branch main https://gitlab.freedesktop.org/mesa/mesa.git mesa
 
-      # ------------------------------------------------------------
-      # 1. Install complete LLVM/Clang 20 toolchain + Mesa build deps
-      # ------------------------------------------------------------
-      - name: Install all build dependencies (LLVM 20, Clang, Mesa deps)
+      - name: Install all build dependencies (LLVM 18)
         run: |
-          # Add official LLVM APT repository for the latest packages
-          wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | sudo tee /etc/apt/trusted.gpg.d/apt.llvm.org.asc
-          sudo add-apt-repository "deb http://apt.llvm.org/$(lsb_release -sc)/ llvm-toolchain-$(lsb_release -sc)-20 main"
           sudo apt-get update -y
-
-          # Install LLVM/Clang 20 full development stack
-          sudo apt-get install -y --no-install-recommends \
-            llvm-20-dev \
-            libclang-20-dev \
-            libclang-cpp20-dev \
-            libclang-common-20-dev \
-            libclc-20-dev \
-            libllvmspirvlib-20-dev \
-            clang-20
-
-          # Install Mesa's native build dependencies (same as before)
           sudo apt-get install -y --no-install-recommends \
             ninja-build python3-pip python3-mako pkg-config cmake flex bison \
             libdrm-dev libx11-xcb-dev libxcb-dri3-dev libxcb-present-dev \
             libxcb-sync-dev libxshmfence-dev libxxf86vm-dev libxrandr-dev \
             libxfixes-dev libxdamage-dev libxext-dev libgl1-mesa-dev \
-            libegl1-mesa-dev libelf-dev glslang-tools zlib1g-dev libzstd-dev \
-            libexpat1-dev libudev-dev wayland-protocols libwayland-dev \
-            libwayland-egl-backend-dev libxcb-keysyms1-dev libxcb-randr0-dev \
-            libxcb-shm0-dev libxcb-xfixes0-dev libxcb-xtest0-dev \
+            libegl1-mesa-dev libelf-dev \
+            llvm-18-dev \
+            libclang-18-dev \
+            libclang-cpp18-dev \
+            libclang-common-18-dev \
+            libclc-18-dev \
+            libllvmspirvlib-18-dev \
+            glslang-tools \
+            zlib1g-dev libzstd-dev libexpat1-dev libudev-dev wayland-protocols \
+            libwayland-dev libwayland-egl-backend-dev libxcb-keysyms1-dev \
+            libxcb-randr0-dev libxcb-shm0-dev libxcb-xfixes0-dev libxcb-xtest0-dev \
             libxcb-xinerama0-dev libxcb-composite0-dev libxcb-damage0-dev \
             libxcb-dpms0-dev libxcb-dri2-0-dev libxcb-glx0-dev libxcb-record0-dev \
             libxcb-res0-dev libxcb-screensaver0-dev libxcb-shape0-dev \
@@ -52,15 +41,10 @@ jobs:
             libxcb-image0-dev libxcb-util-dev libxcb-cursor-dev libxcb-xkb-dev \
             libxkbcommon-dev libxkbcommon-x11-dev libvulkan-dev glslang-dev \
             spirv-tools wget unzip zip patchelf
-
-          # Install latest Meson and Python modules
           pip3 install --user --upgrade pip
           pip3 install --user --upgrade 'meson>=1.4.0' mako packaging
           echo "$HOME/.local/bin" >> $GITHUB_PATH
 
-      # ------------------------------------------------------------
-      # 2. Build host tools required for PanVK cross‑compilation
-      # ------------------------------------------------------------
       - name: Prepare offline compiler for PanVK
         run: |
           cd mesa
@@ -76,9 +60,6 @@ jobs:
           meson install -C build-host
           echo "/tmp/mesa-host/bin" >> $GITHUB_PATH
 
-      # ------------------------------------------------------------
-      # 3. Download Android NDK
-      # ------------------------------------------------------------
       - name: Download Android NDK
         run: |
           mkdir -p $HOME/ndk
@@ -87,9 +68,6 @@ jobs:
           unzip -q android-ndk-${NDK_VERSION}-linux.zip
           echo "ANDROID_NDK_HOME=$HOME/ndk/android-ndk-${NDK_VERSION}" >> $GITHUB_ENV
 
-      # ------------------------------------------------------------
-      # 4. Cross‑compile PanVK (LLVM enabled, explicit llvm-config)
-      # ------------------------------------------------------------
       - name: Cross‑compile PanVK for Android
         run: |
           cd mesa
@@ -103,7 +81,7 @@ jobs:
           cpp = ndk_path / 'toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android${API_LEVEL}-clang++'
           strip = ndk_path / 'toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip'
           pkg-config = '/usr/bin/pkg-config'
-          llvm-config = '/usr/bin/llvm-config-20'
+          llvm-config = '/usr/bin/llvm-config-18'
 
           [host_machine]
           system = 'android'
@@ -133,9 +111,6 @@ jobs:
 
           meson compile -C build-android src/panfrost/vulkan/libvulkan_panfrost.so
 
-      # ------------------------------------------------------------
-      # 5. Package and upload
-      # ------------------------------------------------------------
       - name: Package PanVK driver
         run: |
           mkdir -p artifact
