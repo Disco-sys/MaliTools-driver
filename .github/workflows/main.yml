@@ -78,7 +78,10 @@ jobs:
             -Dplatform-sdk-version=$PLATFORM_SDK_VERSION \
             -Dvulkan-drivers=panfrost \
             -Dgallium-drivers= \
-            -Dllvm=enabled \
+            -Dllvm=disabled \
+            -Dopencl=disabled \
+            -Dgallium-opencl=disabled \
+            -Dmicrosoft-clc=disabled \
             -Dandroid-stub=true \
             -Dbuildtype=release \
             --strip
