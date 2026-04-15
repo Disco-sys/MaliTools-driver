@@ -1,4 +1,4 @@
-name: PanVK Mali Driver (Cross-compile)
+name: PanVK Mali Driver (Android ARM64)
 
 on: push
 
@@ -7,15 +7,20 @@ permissions:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04                # Use explicit 24.04 for newer packages
+    env:
+      NDK_VERSION: r29
+      API_LEVEL: 34                      # NDK r29 uses API 34 by default for clang
     steps:
       - name: Clone Mesa source
-        run: |
-          git clone --depth 1 --branch main https://gitlab.freedesktop.org/mesa/mesa.git mesa
+        run: git clone --depth 1 --branch main https://gitlab.freedesktop.org/mesa/mesa.git mesa
 
-      - name: Install all Mesa build dependencies
+      - name: Install host dependencies
         run: |
           sudo apt-get update -y
+          # Use build-dep to automatically install most required packages
+          sudo apt-get build-dep mesa -y
+          # Install additional tools and libraries not covered by build-dep
           sudo apt-get install -y --no-install-recommends \
             ninja-build \
             python3-pip \
@@ -24,68 +29,26 @@ jobs:
             cmake \
             flex \
             bison \
-            libdrm-dev \
-            libx11-xcb-dev \
-            libxcb-dri3-dev \
-            libxcb-present-dev \
-            libxcb-sync-dev \
-            libxshmfence-dev \
-            libxxf86vm-dev \
-            libxrandr-dev \
-            libxfixes-dev \
-            libxdamage-dev \
-            libxext-dev \
-            libgl1-mesa-dev \
-            libegl1-mesa-dev \
-            libelf-dev \
-            llvm-dev \
-            libclc-20-dev \
-            glslang-tools \
-            zlib1g-dev \
-            libzstd-dev \
-            libexpat1-dev \
-            libudev-dev \
-            wayland-protocols \
-            libwayland-dev \
-            libwayland-egl-backend-dev \
-            libxcb-keysyms1-dev \
-            libxcb-randr0-dev \
-            libxcb-shm0-dev \
-            libxcb-xfixes0-dev \
-            libxcb-xtest0-dev \
-            libxcb-xinerama0-dev \
-            libxcb-composite0-dev \
-            libxcb-damage0-dev \
-            libxcb-dpms0-dev \
-            libxcb-dri2-0-dev \
-            libxcb-glx0-dev \
-            libxcb-record0-dev \
-            libxcb-res0-dev \
-            libxcb-screensaver0-dev \
-            libxcb-shape0-dev \
-            libxcb-xf86dri0-dev \
-            libxcb-xv0-dev \
-            libxcb-xvmc0-dev \
-            libxcb-icccm4-dev \
-            libxcb-image0-dev \
-            libxcb-util-dev \
-            libxcb-cursor-dev \
-            libxcb-xkb-dev \
-            libxkbcommon-dev \
-            libxkbcommon-x11-dev \
-            libvulkan-dev \
-            glslang-dev \
-            spirv-tools \
             wget \
             unzip \
             zip \
-            patchelf
+            patchelf \
+            libdrm-dev \
+            wayland-protocols \
+            libwayland-dev \
+            libwayland-egl-backend-dev \
+            libxcb-*-dev \
+            libx11-xcb-dev \
+            libvulkan-dev \
+            glslang-tools \
+            spirv-tools
 
+          # Install latest Meson and required Python modules
           pip3 install --user --upgrade pip
-          pip3 install --user --upgrade 'meson>=1.4.0' mako packaging
+          pip3 install --user --upgrade 'meson>=1.4.0' mako packaging pyyaml
           echo "$HOME/.local/bin" >> $GITHUB_PATH
 
-      - name: Prepare offline compiler for PanVK
+      - name: Prepare offline compiler for PanVK (required for cross‑compile)
         run: |
           cd mesa
           meson setup build-host \
@@ -104,48 +67,55 @@ jobs:
         run: |
           mkdir -p $HOME/ndk
           cd $HOME/ndk
-          wget -q https://dl.google.com/android/repository/android-ndk-r29-linux.zip
-          unzip -q android-ndk-r29-linux.zip
-          echo "ANDROID_NDK_HOME=$HOME/ndk/android-ndk-r29" >> $GITHUB_ENV
+          wget -q https://dl.google.com/android/repository/android-ndk-${NDK_VERSION}-linux.zip
+          unzip -q android-ndk-${NDK_VERSION}-linux.zip
+          echo "ANDROID_NDK_HOME=$HOME/ndk/android-ndk-${NDK_VERSION}" >> $GITHUB_ENV
 
-      - name: Cross-compile PanVK for Android
+      - name: Cross‑compile PanVK for Android
         run: |
           cd mesa
-          # Create a Meson cross file for Android
+          # Create a correct cross file for the NDK
           cat > android-aarch64.ini << EOF
           [constants]
           ndk_path = '${{ env.ANDROID_NDK_HOME }}'
 
           [binaries]
-          ar = ndk_path / 'toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android-ar'
-          c = ['ccache', ndk_path / 'toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android34-clang']
-          cpp = ['ccache', ndk_path / 'toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android34-clang++', '-fno-exceptions', '-fno-unwind-tables', '-fno-asynchronous-unwind-tables', '-static-libstdc++']
-          c_ld = 'lld'
-          cpp_ld = 'lld'
-          strip = ndk_path / 'toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android-strip'
-          pkgconfig = ['env', 'PKG_CONFIG_LIBDIR=NDKDIR/pkgconfig', '/usr/bin/pkg-config']
+          ar = ndk_path / 'toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'
+          c = ndk_path / 'toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android${API_LEVEL}-clang'
+          cpp = ndk_path / 'toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android${API_LEVEL}-clang++'
+          strip = ndk_path / 'toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip'
+          pkg-config = '/usr/bin/pkg-config'
 
           [host_machine]
           system = 'android'
           cpu_family = 'aarch64'
-          cpu = 'armv8'
+          cpu = 'armv8-a'
           endian = 'little'
+
+          [built-in options]
+          c_args = ['-DANDROID', '-DETIME=ETIMEDOUT']
+          cpp_args = ['-DANDROID', '-DETIME=ETIMEDOUT']
+
+          [properties]
+          needs_exe_wrapper = true
           EOF
 
-          # Configure and build for Android
+          # Configure with only PanVK enabled, LLVM disabled (PanVK does not need LLVM)
           meson setup build-android \
             --cross-file android-aarch64.ini \
             -Dplatforms=android \
-            -Dplatform-sdk-version=34 \
+            -Dplatform-sdk-version=${API_LEVEL} \
             -Dandroid-stub=true \
             -Dgallium-drivers= \
             -Dvulkan-drivers=panfrost \
-            -Dllvm=enabled \
-            -Dbuildtype=release
+            -Dllvm=disabled \
+            -Dbuildtype=release \
+            --strip
 
-          meson compile -C build-android
+          # Compile only the Vulkan ICD
+          meson compile -C build-android src/panfrost/vulkan/libvulkan_panfrost.so
 
-      - name: Package PanVK driver
+      - name: Package driver
         run: |
           mkdir -p artifact
           cp mesa/build-android/src/panfrost/vulkan/libvulkan_panfrost.so artifact/
