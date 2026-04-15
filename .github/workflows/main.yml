@@ -1,4 +1,4 @@
-name: Mesa Native Build Test (Full Dependencies)
+name: PanVK Mali Driver (Android)
 
 on: push
 
@@ -8,96 +8,95 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      NDK_VERSION: r29
+      API_LEVEL: 31
+      PLATFORM_SDK_VERSION: 34
     steps:
       - name: Clone Mesa source
         run: |
           git clone --depth 1 --branch main https://gitlab.freedesktop.org/mesa/mesa.git mesa
 
-      - name: Install all Mesa build dependencies
+      - name: Install all Mesa build dependencies (same as your success!)
         run: |
           sudo apt-get update -y
           sudo apt-get install -y --no-install-recommends \
-            ninja-build \
-            python3-pip \
-            python3-mako \
-            pkg-config \
-            cmake \
-            flex \
-            bison \
-            libdrm-dev \
-            libx11-xcb-dev \
-            libxcb-dri3-dev \
-            libxcb-present-dev \
-            libxcb-sync-dev \
-            libxshmfence-dev \
-            libxxf86vm-dev \
-            libxrandr-dev \
-            libxfixes-dev \
-            libxdamage-dev \
-            libxext-dev \
-            libgl1-mesa-dev \
-            libegl1-mesa-dev \
-            libelf-dev \
-            llvm-dev \
-            libclc-20-dev \
-            glslang-tools \
-            zlib1g-dev \
-            libzstd-dev \
-            libexpat1-dev \
-            libudev-dev \
-            wayland-protocols \
-            libwayland-dev \
-            libwayland-egl-backend-dev \
-            libxcb-keysyms1-dev \
-            libxcb-randr0-dev \
-            libxcb-shm0-dev \
-            libxcb-xfixes0-dev \
-            libxcb-xtest0-dev \
-            libxcb-xinerama0-dev \
-            libxcb-composite0-dev \
-            libxcb-damage0-dev \
-            libxcb-dpms0-dev \
-            libxcb-dri2-0-dev \
-            libxcb-glx0-dev \
-            libxcb-record0-dev \
-            libxcb-res0-dev \
-            libxcb-screensaver0-dev \
-            libxcb-shape0-dev \
-            libxcb-xf86dri0-dev \
-            libxcb-xv0-dev \
-            libxcb-xvmc0-dev \
-            libxcb-icccm4-dev \
-            libxcb-image0-dev \
-            libxcb-util-dev \
-            libxcb-cursor-dev \
-            libxcb-xkb-dev \
-            libxkbcommon-dev \
-            libxkbcommon-x11-dev \
-            libvulkan-dev \
-            glslang-dev \
-            spirv-tools \
-            wget \
-            unzip \
-            zip \
-            patchelf
+            ninja-build python3-pip python3-mako pkg-config cmake flex bison \
+            libdrm-dev libx11-xcb-dev libxcb-dri3-dev libxcb-present-dev \
+            libxcb-sync-dev libxshmfence-dev libxxf86vm-dev libxrandr-dev \
+            libxfixes-dev libxdamage-dev libxext-dev libgl1-mesa-dev \
+            libegl1-mesa-dev libelf-dev llvm-dev libclc-20-dev glslang-tools \
+            zlib1g-dev libzstd-dev libexpat1-dev libudev-dev wayland-protocols \
+            libwayland-dev libwayland-egl-backend-dev libxcb-keysyms1-dev \
+            libxcb-randr0-dev libxcb-shm0-dev libxcb-xfixes0-dev libxcb-xtest0-dev \
+            libxcb-xinerama0-dev libxcb-composite0-dev libxcb-damage0-dev \
+            libxcb-dpms0-dev libxcb-dri2-0-dev libxcb-glx0-dev libxcb-record0-dev \
+            libxcb-res0-dev libxcb-screensaver0-dev libxcb-shape0-dev \
+            libxcb-xf86dri0-dev libxcb-xv0-dev libxcb-xvmc0-dev libxcb-icccm4-dev \
+            libxcb-image0-dev libxcb-util-dev libxcb-cursor-dev libxcb-xkb-dev \
+            libxkbcommon-dev libxkbcommon-x11-dev libvulkan-dev glslang-dev \
+            spirv-tools wget unzip zip patchelf
 
           pip3 install --user --upgrade pip
           pip3 install --user --upgrade 'meson>=1.4.0' mako packaging
           echo "$HOME/.local/bin" >> $GITHUB_PATH
 
-      - name: Configure Mesa (llvmpipe test)
+      - name: Download Android NDK
+        run: |
+          echo "NDK installing..."
+          mkdir -p dependencies/NDK
+          cd dependencies/NDK
+          wget -q https://dl.google.com/android/repository/android-ndk-${NDK_VERSION}-linux.zip
+          unzip -q android-ndk-${NDK_VERSION}-linux.zip
+          echo "TOOLCHAIN=$PWD/android-ndk-${NDK_VERSION}/toolchains/llvm/prebuilt/linux-x86_64" >> $GITHUB_ENV
+          echo "NDK installed."
+
+      - name: Configure and compile PanVK for Android
         run: |
           cd mesa
-          meson setup build . \
-            -Dgallium-drivers=llvmpipe \
-            -Dvulkan-drivers= \
+          cat > cross-android.txt <<EOF
+          [binaries]
+          c = '${TOOLCHAIN}/bin/aarch64-linux-android${API_LEVEL}-clang'
+          cpp = '${TOOLCHAIN}/bin/aarch64-linux-android${API_LEVEL}-clang++'
+          ar = '${TOOLCHAIN}/bin/llvm-ar'
+          strip = '${TOOLCHAIN}/bin/llvm-strip'
+          pkg-config = '/usr/bin/pkg-config'
+
+          [host_machine]
+          system = 'android'
+          cpu_family = 'aarch64'
+          cpu = 'armv8-a'
+          endian = 'little'
+
+          [built-in options]
+          c_args = ['-DETIME=ETIMEDOUT', '-DANDROID']
+          cpp_args = ['-DETIME=ETIMEDOUT', '-DANDROID']
+
+          [properties]
+          needs_exe_wrapper = true
+          EOF
+
+          meson setup build-android . --cross-file cross-android.txt \
+            -Dplatforms=android \
+            -Dplatform-sdk-version=$PLATFORM_SDK_VERSION \
+            -Dvulkan-drivers=panfrost \
+            -Dgallium-drivers= \
             -Dllvm=enabled \
-            -Dbuildtype=release
+            -Dandroid-stub=true \
+            -Dbuildtype=release \
+            --strip
 
-      - name: Compile Mesa
+          meson compile -C build-android src/panfrost/vulkan/libvulkan_panfrost.so
+
+      - name: Package PanVK driver
         run: |
-          cd mesa
-          meson compile -C build
+          mkdir -p install
+          cp mesa/build-android/src/panfrost/vulkan/libvulkan_panfrost.so install/
+          cd install
+          zip panvk-driver.zip libvulkan_panfrost.so
 
-      - name: Confirm success
-        run: echo "✅ Mesa native build completed successfully! All dependencies are satisfied."
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: panvk-driver
+          path: install/panvk-driver.zip
