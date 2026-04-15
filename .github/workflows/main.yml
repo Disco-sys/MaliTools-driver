@@ -96,7 +96,7 @@ jobs:
             -Dandroid-stub=true \
             -Dgallium-drivers= \
             -Dvulkan-drivers=panfrost \
-            -Dllvm=disabled \
+            -Dllvm=enabled \
             -Doptimization=3 \
             -Db_ndebug=true \
             --strip
