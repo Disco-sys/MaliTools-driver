@@ -15,7 +15,7 @@ jobs:
       - name: Clone Mesa source
         run: git clone --depth 1 --branch main https://gitlab.freedesktop.org/mesa/mesa.git mesa
 
-      - name: Install all build dependencies (LLVM 18)
+      - name: Install all build dependencies (complete LLVM 18 stack)
         run: |
           sudo apt-get update -y
           sudo apt-get install -y --no-install-recommends \
@@ -28,6 +28,7 @@ jobs:
             libclang-18-dev \
             libclang-cpp18-dev \
             libclang-common-18-dev \
+            libclang-rt-18-dev \
             libclc-18-dev \
             libllvmspirvlib-18-dev \
             glslang-tools \
@@ -97,6 +98,7 @@ jobs:
           needs_exe_wrapper = true
           EOF
 
+          export PKG_CONFIG_PATH="/usr/lib/llvm-18/lib/pkgconfig:$PKG_CONFIG_PATH"
           meson setup build-android \
             --cross-file android-aarch64.ini \
             -Dplatforms=android \
