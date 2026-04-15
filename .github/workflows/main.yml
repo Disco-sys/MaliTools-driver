@@ -1,4 +1,4 @@
-name: PanVK Mali Driver (Android ARM64)
+name: PanVK Mali Driver (Android ARM64) - Mesa 25.1.0
 
 on: push
 
@@ -11,11 +11,12 @@ jobs:
     env:
       NDK_VERSION: r29
       API_LEVEL: 34
+      MESA_TAG: mesa-25.1.0-rc1  # Pinned to 25.1.x release branch
     steps:
-      - name: Clone Mesa source
-        run: git clone --depth 1 --branch main https://gitlab.freedesktop.org/mesa/mesa.git mesa
+      - name: Clone Mesa source (25.1.0)
+        run: git clone --depth 1 --branch ${{ env.MESA_TAG }} https://gitlab.freedesktop.org/mesa/mesa.git mesa
 
-      - name: Install all build dependencies (complete LLVM 18 stack)
+      - name: Install all build dependencies (LLVM 18)
         run: |
           sudo apt-get update -y
           sudo apt-get install -y --no-install-recommends \
@@ -28,7 +29,6 @@ jobs:
             libclang-18-dev \
             libclang-cpp18-dev \
             libclang-common-18-dev \
-            libclang-rt-18-dev \
             libclc-18-dev \
             libllvmspirvlib-18-dev \
             glslang-tools \
@@ -123,5 +123,5 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: panvk-mali-driver
+          name: panvk-mali-driver-25.1.0
           path: panvk-mali-driver.zip
