@@ -1,4 +1,4 @@
-name: PanVK Mali Driver (Android ARM64) - Mesa 25.1.0
+name: PanVK Mali Driver (Android ARM64) - Mesa 26.1
 
 on: push
 
@@ -11,52 +11,86 @@ jobs:
     env:
       NDK_VERSION: r29
       API_LEVEL: 34
-      MESA_TAG: mesa-25.1.0-rc1
     steps:
-      - name: Clone Mesa source (25.1.0)
-        run: git clone --depth 1 --branch ${{ env.MESA_TAG }} https://gitlab.freedesktop.org/mesa/mesa.git mesa
+      # ========== UNCHANGED: Clone Mesa main branch (26.1-dev) ==========
+      - name: Clone Mesa source
+        run: |
+          git clone --depth 1 --branch main https://gitlab.freedesktop.org/mesa/mesa.git mesa
 
-      - name: Install base build tools (no LLVM)
+      # ========== UNCHANGED: Install all Mesa build dependencies (exactly as native build) ==========
+      - name: Install all Mesa build dependencies
         run: |
           sudo apt-get update -y
           sudo apt-get install -y --no-install-recommends \
-            ninja-build python3-pip python3-mako pkg-config cmake flex bison \
-            libdrm-dev libx11-xcb-dev libxcb-dri3-dev libxcb-present-dev \
-            libxcb-sync-dev libxshmfence-dev libxxf86vm-dev libxrandr-dev \
-            libxfixes-dev libxdamage-dev libxext-dev libgl1-mesa-dev \
-            libegl1-mesa-dev libelf-dev glslang-tools zlib1g-dev libzstd-dev \
-            libexpat1-dev libudev-dev wayland-protocols libwayland-dev \
-            libwayland-egl-backend-dev libxcb-keysyms1-dev libxcb-randr0-dev \
-            libxcb-shm0-dev libxcb-xfixes0-dev libxcb-xtest0-dev \
-            libxcb-xinerama0-dev libxcb-composite0-dev libxcb-damage0-dev \
-            libxcb-dpms0-dev libxcb-dri2-0-dev libxcb-glx0-dev libxcb-record0-dev \
-            libxcb-res0-dev libxcb-screensaver0-dev libxcb-shape0-dev \
-            libxcb-xf86dri0-dev libxcb-xv0-dev libxcb-xvmc0-dev libxcb-icccm4-dev \
-            libxcb-image0-dev libxcb-util-dev libxcb-cursor-dev libxcb-xkb-dev \
-            libxkbcommon-dev libxkbcommon-x11-dev libvulkan-dev glslang-dev \
-            spirv-tools wget unzip zip patchelf
+            ninja-build \
+            python3-pip \
+            python3-mako \
+            pkg-config \
+            cmake \
+            flex \
+            bison \
+            libdrm-dev \
+            libx11-xcb-dev \
+            libxcb-dri3-dev \
+            libxcb-present-dev \
+            libxcb-sync-dev \
+            libxshmfence-dev \
+            libxxf86vm-dev \
+            libxrandr-dev \
+            libxfixes-dev \
+            libxdamage-dev \
+            libxext-dev \
+            libgl1-mesa-dev \
+            libegl1-mesa-dev \
+            libelf-dev \
+            llvm-dev \
+            libclc-20-dev \
+            glslang-tools \
+            zlib1g-dev \
+            libzstd-dev \
+            libexpat1-dev \
+            libudev-dev \
+            wayland-protocols \
+            libwayland-dev \
+            libwayland-egl-backend-dev \
+            libxcb-keysyms1-dev \
+            libxcb-randr0-dev \
+            libxcb-shm0-dev \
+            libxcb-xfixes0-dev \
+            libxcb-xtest0-dev \
+            libxcb-xinerama0-dev \
+            libxcb-composite0-dev \
+            libxcb-damage0-dev \
+            libxcb-dpms0-dev \
+            libxcb-dri2-0-dev \
+            libxcb-glx0-dev \
+            libxcb-record0-dev \
+            libxcb-res0-dev \
+            libxcb-screensaver0-dev \
+            libxcb-shape0-dev \
+            libxcb-xf86dri0-dev \
+            libxcb-xv0-dev \
+            libxcb-xvmc0-dev \
+            libxcb-icccm4-dev \
+            libxcb-image0-dev \
+            libxcb-util-dev \
+            libxcb-cursor-dev \
+            libxcb-xkb-dev \
+            libxkbcommon-dev \
+            libxkbcommon-x11-dev \
+            libvulkan-dev \
+            glslang-dev \
+            spirv-tools \
+            wget \
+            unzip \
+            zip \
+            patchelf
+
           pip3 install --user --upgrade pip
           pip3 install --user --upgrade 'meson>=1.4.0' mako packaging
           echo "$HOME/.local/bin" >> $GITHUB_PATH
 
-      - name: Prepare offline compiler for PanVK (LLVM disabled)
-        run: |
-          cd mesa
-          meson setup build-host \
-            -Dprefix=/tmp/mesa-host \
-            -Dbuildtype=release \
-            -Dstrip=true \
-            -Dplatforms= \
-            -Dgallium-drivers=panfrost \
-            -Dvulkan-drivers= \
-            -Dglx=disabled \
-            -Degl=disabled \
-            -Dllvm=disabled \
-            -Dtools=panfrost \
-            -Dinstall-precomp-compiler=true
-          meson install -C build-host
-          echo "/tmp/mesa-host/bin" >> $GITHUB_PATH
-
+      # ========== ADDED: Download Android NDK ==========
       - name: Download Android NDK
         run: |
           mkdir -p $HOME/ndk
@@ -65,7 +99,8 @@ jobs:
           unzip -q android-ndk-${NDK_VERSION}-linux.zip
           echo "ANDROID_NDK_HOME=$HOME/ndk/android-ndk-${NDK_VERSION}" >> $GITHUB_ENV
 
-      - name: Cross‑compile PanVK for Android (LLVM disabled)
+      # ========== REPLACED: Configure and compile PanVK for Android ==========
+      - name: Configure and compile PanVK for Android
         run: |
           cd mesa
           cat > android-aarch64.ini << EOF
@@ -78,6 +113,7 @@ jobs:
           cpp = ndk_path / 'toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android${API_LEVEL}-clang++'
           strip = ndk_path / 'toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip'
           pkg-config = '/usr/bin/pkg-config'
+          llvm-config = '/usr/bin/llvm-config'
 
           [host_machine]
           system = 'android'
@@ -100,13 +136,14 @@ jobs:
             -Dandroid-stub=true \
             -Dgallium-drivers= \
             -Dvulkan-drivers=panfrost \
-            -Dllvm=disabled \
+            -Dllvm=enabled \
             -Doptimization=3 \
             -Db_ndebug=true \
             --strip
 
           meson compile -C build-android src/panfrost/vulkan/libvulkan_panfrost.so
 
+      # ========== REPLACED: Package driver (instead of success message) ==========
       - name: Package PanVK driver
         run: |
           mkdir -p artifact
@@ -117,5 +154,5 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: panvk-mali-driver-25.1.0
+          name: panvk-mali-driver-26.1
           path: panvk-mali-driver.zip
