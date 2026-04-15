@@ -1,4 +1,4 @@
-name: PanVK Mali Driver
+name: Panfrost ARM Driver
 
 on: push
 
@@ -13,7 +13,7 @@ jobs:
       API_LEVEL: 31
       PLATFORM_SDK_VERSION: 34
     steps:
-      - name: Clone Mesa source
+      - name: Clone Mesa
         run: git clone --depth 1 --branch main https://gitlab.freedesktop.org/mesa/mesa.git mesa
 
       - name: Install base build tools
@@ -21,23 +21,11 @@ jobs:
           sudo apt-get update -y
           sudo apt-get install -y --no-install-recommends \
             ninja-build python3-pip python3-mako pkg-config cmake flex bison \
-            wget unzip zip patchelf xz-utils lsb-release gnupg
+            wget unzip zip patchelf
 
           pip3 install --user --upgrade pip
-          pip3 install --user --upgrade meson packaging
+          pip3 install --user --upgrade meson mako packaging
           echo "$HOME/.local/bin" >> $GITHUB_PATH
-
-      - name: Install LLVM 18 from official APT repository
-        run: |
-          wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | sudo tee /etc/apt/trusted.gpg.d/apt.llvm.org.asc
-          sudo add-apt-repository "deb http://apt.llvm.org/$(lsb_release -sc)/ llvm-toolchain-$(lsb_release -sc)-18 main"
-          sudo apt-get update -y
-          sudo apt-get install -y --no-install-recommends \
-            llvm-18-dev \
-            libclang-18-dev \
-            libclang-cpp18-dev \
-            libclc-18-dev \
-            libllvmspirvlib-18-dev
 
       - name: Download Android NDK
         run: |
@@ -47,7 +35,7 @@ jobs:
           unzip -q android-ndk-${NDK_VERSION}-linux.zip
           echo "TOOLCHAIN=$PWD/android-ndk-${NDK_VERSION}/toolchains/llvm/prebuilt/linux-x86_64" >> $GITHUB_ENV
 
-      - name: Configure and compile PanVK
+      - name: Configure and compile Panfrost (OpenGL ES) for ARM
         run: |
           cd mesa
           cat > cross-android.txt <<EOF
@@ -57,7 +45,6 @@ jobs:
           ar = '${TOOLCHAIN}/bin/llvm-ar'
           strip = '${TOOLCHAIN}/bin/llvm-strip'
           pkg-config = '/usr/bin/pkg-config'
-          llvm-config = '/usr/bin/llvm-config-18'
 
           [host_machine]
           system = 'android'
@@ -76,24 +63,27 @@ jobs:
           meson setup build-android . --cross-file cross-android.txt \
             -Dplatforms=android \
             -Dplatform-sdk-version=$PLATFORM_SDK_VERSION \
-            -Dvulkan-drivers=panfrost \
-            -Dgallium-drivers= \
-            -Dllvm=enabled \
+            -Dgallium-drivers=panfrost \
+            -Dvulkan-drivers= \
+            -Dllvm=disabled \
             -Dandroid-stub=true \
             -Dbuildtype=release \
             --strip
 
-          meson compile -C build-android src/panfrost/vulkan/libvulkan_panfrost.so
+          meson compile -C build-android src/gallium/targets/dri/libgallium_dri.so
 
       - name: Package driver
         run: |
           mkdir -p install
-          cp mesa/build-android/src/panfrost/vulkan/libvulkan_panfrost.so install/
+          cp mesa/build-android/src/gallium/targets/dri/libgallium_dri.so install/
+          cp mesa/build-android/src/egl/libEGL.so install/
+          cp mesa/build-android/src/mapi/shared-glapi/libglapi.so install/
+          cp mesa/build-android/src/gles/libGLESv2.so install/
           cd install
-          zip panvk-driver.zip libvulkan_panfrost.so
+          zip -r panfrost-arm-driver.zip *.so
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: panvk-driver
-          path: install/panvk-driver.zip
+          name: panfrost-arm-driver
+          path: install/panfrost-arm-driver.zip
